@@ -2089,76 +2089,210 @@
       }
     }
 
+    function normalizeImportHeader(value) {
+      return String(value ?? '')
+        .replace(/^\uFEFF/, '')
+        .trim()
+        .toLowerCase()
+        .replace(/[()]/g, '')
+        .replace(/\s+/g, ' ');
+    }
+
+    function getImportField(row, aliases, fallback = '') {
+      const keys = Object.keys(row || {});
+      const normalizedMap = new Map(keys.map(k => [normalizeImportHeader(k), k]));
+      for (const alias of aliases) {
+        const normalized = normalizeImportHeader(alias);
+        const actualKey = normalizedMap.get(normalized);
+        if (actualKey !== undefined) return row[actualKey];
+      }
+      return fallback;
+    }
+
+    function parseImportNumber(value, fallback = 0) {
+      if (value === null || value === undefined || value === '') return fallback;
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      let text = String(value).trim();
+      if (!text) return fallback;
+      text = text.replace(/rp\.?/gi, '').replace(/\s+/g, '');
+      // Excel Indonesia can export 1.250.000 or 1,250.000 depending on source.
+      if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(text)) {
+        text = text.replace(/\./g, '').replace(',', '.');
+      } else if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(text)) {
+        text = text.replace(/,/g, '');
+      } else {
+        text = text.replace(/,/g, '');
+      }
+      const num = Number(text);
+      return Number.isFinite(num) ? num : fallback;
+    }
+
+    function createProductFromImportRow(row, defaultOrigin) {
+      const sku = String(getImportField(row, ['Kode SKU', 'SKU', 'Kode'], '')).trim().toUpperCase();
+      const name = String(getImportField(row, ['Nama Barang', 'Nama', 'Nama Produk'], '')).trim();
+      if (!sku || !name) return null;
+
+      const originRaw = String(getImportField(row, ['Klasifikasi Asal', 'Asal', 'Origin'], defaultOrigin)).toLowerCase();
+      const origin = originRaw.includes('import') ? 'import' : 'lokal';
+
+      const category = String(getImportField(row, ['Kategori', 'Category'], 'General') || 'General').trim();
+      const warehouse = String(getImportField(row, ['Gudang / Lokasi', 'Gudang', 'Lokasi Gudang', 'Warehouse'], warehouses[0]?.name || 'Gudang Utama A') || 'Gudang Utama A').trim();
+      const shelf = String(getImportField(row, ['Kode Rak', 'Rak', 'Shelf'], 'A-01') || 'A-01').trim();
+      const stock = parseImportNumber(getImportField(row, ['Stok Saat Ini (Pcs)', 'Stok Saat Ini', 'Stok', 'Stock'], 0), 0);
+      const minStock = parseImportNumber(getImportField(row, ['Stok Min (Pcs)', 'Stok Min', 'Minimum Stock', 'Min Stock'], 5), 5);
+      const price = parseImportNumber(getImportField(row, ['Harga Satuan (Rp)', 'Harga Satuan', 'Harga', 'Price'], 0), 0);
+      const supplier = String(getImportField(row, ['Supplier Preferred', 'Supplier', 'Vendor'], '-') || '-').trim();
+      const fungsi = String(getImportField(row, ['Fungsi Sparepart', 'Fungsi', 'Function'], '-') || '-').trim();
+      const image = String(getImportField(row, ['URL Foto Produk', 'URL Foto', 'Foto', 'Image'], '') || '').trim();
+
+      return {
+        id: 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        sku,
+        name,
+        origin,
+        category,
+        warehouse,
+        shelf,
+        stock,
+        minStock,
+        price,
+        supplier,
+        fungsi,
+        image: image && image !== '-' && /^https?:\/\//i.test(image)
+          ? image
+          : `https://placehold.co/100x100/fb923c/ffffff?text=${encodeURIComponent(sku)}`
+      };
+    }
+
     async function handleExcelImport(e) {
       if (currentRole !== 'admin') return;
 
-      const file = e.target.files[0];
+      const file = e.target.files?.[0];
       if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = async function(evt) {
-        try {
-          const data = new Uint8Array(evt.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheet];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      const inputEl = e.target;
+      inputEl.disabled = true;
 
-          if (!jsonData || jsonData.length === 0) {
-            showToast('File Excel/CSV kosong!', 'error');
-            return;
-          }
-
-          let countSuccess = 0;
-          for (const row of jsonData) {
-            const sku = (row['Kode SKU'] || row['SKU'] || '').toString().toUpperCase().trim();
-            const name = row['Nama Barang'] || row['Nama'] || '';
-            if (!sku || !name || products.some(p => p.sku === sku)) continue;
-
-            const originRaw = (row['Klasifikasi Asal'] || (currentTab === 'import' ? 'import' : 'lokal')).toString().toLowerCase();
-            const origin = originRaw.includes('import') ? 'import' : 'lokal';
-
-            const newProd = {
-              id: 'p-' + Date.now() + Math.random().toString(36).substr(2, 4),
-              sku,
-              name,
-              origin,
-              category: row['Kategori'] || 'General',
-              warehouse: row['Gudang'] || warehouses[0]?.name || 'Gudang Utama A',
-              shelf: row['Rak'] || 'A-01',
-              stock: parseInt(row['Stok Saat Ini'] || 0) || 0,
-              minStock: parseInt(row['Stok Min'] || 5) || 5,
-              price: parseInt(row['Harga Satuan'] || 0) || 0,
-              supplier: row['Supplier Preferred'] || '-',
-              fungsi: row['Fungsi Sparepart'] || '-',
-              image: row['URL Foto Produk'] || `https://placehold.co/100x100/fb923c/ffffff?text=${encodeURIComponent(sku)}`
-            };
-
-            products.unshift(newProd);
-
-            if (isCloudConnected) {
-              await db.collection('products').doc(newProd.id).set({
-                id: newProd.id, sku: newProd.sku, name: newProd.name,
-                origin: newProd.origin, category: newProd.category,
-                stock: newProd.stock, min_stock: newProd.minStock,
-                price: newProd.price, warehouse: newProd.warehouse,
-                shelf: newProd.shelf, supplier: newProd.supplier, image: newProd.image,
-                fungsi: newProd.fungsi
-              }, { merge: true });
-            }
-            countSuccess++;
-          }
-
-          saveStateLocally();
-          refreshCurrentView();
-          showToast(`Import Selesai: +${countSuccess} barang ditambahkan`);
-        } catch (err) {
-          console.error(err);
-          showToast('Gagal memproses file Excel!', 'error');
+      try {
+        const hasXlsx = await ensureXlsxLibrary();
+        if (!hasXlsx) {
+          throw new Error('XLSX_LIBRARY_UNAVAILABLE');
         }
-      };
-      reader.readAsBuffer(file);
-      e.target.value = '';
+
+        const data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('FILE_READ_ERROR'));
+          // BUG FIX: FileReader tidak memiliki readAsBuffer().
+          // Gunakan readAsArrayBuffer() agar XLSX/CSV benar-benar dapat dibaca browser.
+          reader.readAsArrayBuffer(file);
+        });
+
+        const workbook = window.XLSX.read(new Uint8Array(data), {
+          type: 'array',
+          cellDates: false,
+          raw: false
+        });
+
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('NO_SHEET');
+        }
+
+        const firstSheet = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheet];
+        const jsonData = window.XLSX.utils.sheet_to_json(worksheet, {
+          defval: '',
+          raw: false
+        });
+
+        if (!Array.isArray(jsonData) || jsonData.length === 0) {
+          showToast('File Excel/CSV kosong atau header tidak terbaca!', 'error');
+          return;
+        }
+
+        const defaultOrigin = currentTab === 'import' ? 'import' : 'lokal';
+        const existingSkuSet = new Set(products.map(p => String(p.sku || '').trim().toUpperCase()));
+        const rowsToImport = [];
+        let skippedDuplicate = 0;
+        let skippedInvalid = 0;
+
+        for (const row of jsonData) {
+          const product = createProductFromImportRow(row, defaultOrigin);
+          if (!product) {
+            skippedInvalid++;
+            continue;
+          }
+
+          if (existingSkuSet.has(product.sku)) {
+            skippedDuplicate++;
+            continue;
+          }
+
+          existingSkuSet.add(product.sku);
+          rowsToImport.push(product);
+        }
+
+        if (rowsToImport.length === 0) {
+          if (skippedDuplicate > 0) {
+            showToast(`Tidak ada barang baru. ${skippedDuplicate} SKU sudah terdaftar.`, 'error');
+          } else {
+            showToast('Tidak ada data valid yang dapat diimport. Periksa header Excel.', 'error');
+          }
+          return;
+        }
+
+        // Simpan ke cloud dengan batch agar import banyak baris tidak mudah gagal
+        // dan mengurangi kemungkinan hanya sebagian data tersimpan.
+        if (isCloudConnected) {
+          const chunkSize = 450;
+          for (let i = 0; i < rowsToImport.length; i += chunkSize) {
+            const chunk = rowsToImport.slice(i, i + chunkSize);
+            const batch = db.batch();
+            chunk.forEach(product => {
+              const ref = db.collection('products').doc(String(product.id));
+              batch.set(ref, {
+                id: product.id,
+                sku: product.sku,
+                name: product.name,
+                origin: product.origin,
+                category: product.category,
+                stock: product.stock,
+                min_stock: product.minStock,
+                price: product.price,
+                warehouse: product.warehouse,
+                shelf: product.shelf,
+                supplier: product.supplier,
+                image: product.image,
+                fungsi: product.fungsi
+              }, { merge: true });
+            });
+            await batch.commit();
+          }
+        }
+
+        // Baru masukkan ke state lokal setelah cloud berhasil.
+        products = [...rowsToImport, ...products];
+        saveStateLocally();
+        refreshCurrentView();
+
+        const extra = [];
+        if (skippedDuplicate) extra.push(`${skippedDuplicate} duplikat`);
+        if (skippedInvalid) extra.push(`${skippedInvalid} baris tidak valid`);
+        const detail = extra.length ? ` (${extra.join(', ')} dilewati)` : '';
+        showToast(`Import berhasil: ${rowsToImport.length} barang ditambahkan${detail}`);
+      } catch (err) {
+        console.error('Import Excel/CSV gagal:', err);
+        if (err?.message === 'XLSX_LIBRARY_UNAVAILABLE') {
+          showToast('Library Excel gagal dimuat. Periksa koneksi internet lalu coba lagi.', 'error');
+        } else if (err?.message === 'FILE_READ_ERROR') {
+          showToast('File tidak dapat dibaca oleh browser.', 'error');
+        } else {
+          showToast('Import gagal. Pastikan file Excel/CSV menggunakan format katalog yang sesuai.', 'error');
+        }
+      } finally {
+        inputEl.disabled = false;
+        inputEl.value = '';
+      }
     }
 
     function openEditProductModal(sku) {
