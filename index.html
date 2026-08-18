@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="app-build" content="2026-08-18-export-fix-v2" />
   <title>System Stok Digital - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23fb923c'/><text x='50%' y='68%' font-size='65' font-weight='900' font-family='sans-serif' fill='white' text-anchor='middle'>A</text></svg>">
@@ -1903,36 +1904,166 @@
       setElementHTML('catalog-tbody', rows);
     }
 
-    function exportCatalogToExcel() {
-      const activeCategory = currentTab === 'lokal' ? 'lokal' : 'import';
-      const filtered = products.filter(p => p.origin === activeCategory);
-      if (filtered.length === 0) {
-        showToast('Tidak ada data barang untuk diexport!', 'error');
-        return;
+    // =======================================================================
+    // EXPORT KATALOG BARANG - ROBUST / NO-ERROR FALLBACK
+    // =======================================================================
+    function downloadBlobFile(content, filename, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function csvEscape(value) {
+      const text = value === null || value === undefined ? '' : String(value);
+      return '"' + text.replace(/"/g, '""') + '"';
+    }
+
+    function exportCatalogToCSVFallback(data, activeCategory, dateStr) {
+      const headers = Object.keys(data[0] || {});
+      const lines = [headers.map(csvEscape).join(',')];
+      data.forEach(row => {
+        lines.push(headers.map(header => csvEscape(row[header])).join(','));
+      });
+      const csv = '\uFEFF' + lines.join('\r\n');
+      downloadBlobFile(csv, `Data_Katalog_${activeCategory.toUpperCase()}_${dateStr}.csv`, 'text/csv;charset=utf-8');
+    }
+
+    function loadScriptOnce(src) {
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[data-dynamic-lib="${src}"]`);
+        if (existing) {
+          if (window.XLSX) return resolve(true);
+          existing.addEventListener('load', () => resolve(!!window.XLSX), { once: true });
+          existing.addEventListener('error', () => reject(new Error('Gagal memuat library XLSX')), { once: true });
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.dataset.dynamicLib = src;
+        script.onload = () => resolve(!!window.XLSX);
+        script.onerror = () => reject(new Error('Gagal memuat library XLSX'));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function ensureXlsxLibrary() {
+      if (window.XLSX && window.XLSX.utils && typeof window.XLSX.writeFile === 'function') {
+        return true;
       }
 
-      const data = filtered.map(p => ({
-        'Kode SKU': p.sku,
-        'Nama Barang': p.name,
-        'Klasifikasi Asal': p.origin.toUpperCase(),
-        'Kategori': p.category,
-        'Gudang / Lokasi': p.warehouse,
-        'Kode Rak': p.shelf,
-        'Stok Saat Ini (Pcs)': p.stock,
-        'Stok Min (Pcs)': p.minStock,
-        'Harga Satuan (Rp)': p.price,
-        'Total Nilai Aset (Rp)': p.stock * p.price,
-        'Supplier Preferred': p.supplier,
-        'Fungsi Sparepart': p.fungsi || '-',
-        'URL Foto Produk': p.image || '-'
-      }));
+      const sources = [
+        'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+        'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+      ];
 
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Katalog " + activeCategory.toUpperCase());
-      const dateStr = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(wb, "Data_Katalog_" + activeCategory.toUpperCase() + "_" + dateStr + ".xlsx");
-      showToast('File Excel Katalog berhasil diunduh!');
+      for (const src of sources) {
+        try {
+          const loaded = await loadScriptOnce(src);
+          if (loaded && window.XLSX) return true;
+        } catch (err) {
+          console.warn('XLSX library tidak dapat dimuat dari:', src, err);
+        }
+      }
+      return false;
+    }
+
+    async function exportCatalogToExcel() {
+      if (window.__exportCatalogRunning) return;
+      window.__exportCatalogRunning = true;
+
+      const button = document.querySelector('button[onclick="exportCatalogToExcel()"]');
+      const originalButtonHTML = button ? button.innerHTML : '';
+      if (button) {
+        button.disabled = true;
+        button.classList.add('opacity-60', 'pointer-events-none');
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
+      }
+
+      try {
+        const activeCategory = currentTab === 'import' ? 'import' : 'lokal';
+        const filtered = products.filter(p => String(p.origin || '').toLowerCase() === activeCategory);
+
+        if (filtered.length === 0) {
+          showToast('Tidak ada data barang untuk diexport!', 'error');
+          return;
+        }
+
+        const data = filtered.map(p => ({
+          'Kode SKU': p.sku || '-',
+          'Nama Barang': p.name || '-',
+          'Klasifikasi Asal': String(p.origin || activeCategory).toUpperCase(),
+          'Kategori': p.category || '-',
+          'Gudang / Lokasi': p.warehouse || '-',
+          'Kode Rak': p.shelf || '-',
+          'Stok Saat Ini (Pcs)': Number(p.stock || 0),
+          'Stok Min (Pcs)': Number(p.minStock || 0),
+          'Harga Satuan (Rp)': Number(p.price || 0),
+          'Total Nilai Aset (Rp)': Number(p.stock || 0) * Number(p.price || 0),
+          'Supplier Preferred': p.supplier || '-',
+          'Fungsi Sparepart': p.fungsi || '-',
+          'URL Foto Produk': p.image || '-'
+        }));
+
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const hasXlsx = await ensureXlsxLibrary();
+
+        if (hasXlsx) {
+          const ws = window.XLSX.utils.json_to_sheet(data);
+          const wb = window.XLSX.utils.book_new();
+          window.XLSX.utils.book_append_sheet(wb, ws, 'Katalog ' + activeCategory.toUpperCase());
+          window.XLSX.writeFile(wb, `Data_Katalog_${activeCategory.toUpperCase()}_${dateStr}.xlsx`);
+          showToast('File Excel Katalog berhasil diunduh!');
+        } else {
+          // Fallback aman: CSV UTF-8 yang bisa langsung dibuka di Microsoft Excel.
+          exportCatalogToCSVFallback(data, activeCategory, dateStr);
+          showToast('Library Excel tidak tersedia. File CSV kompatibel Excel berhasil diunduh!', 'success');
+        }
+      } catch (error) {
+        console.error('Export Katalog gagal:', error);
+        try {
+          const activeCategory = currentTab === 'import' ? 'import' : 'lokal';
+          const filtered = products.filter(p => String(p.origin || '').toLowerCase() === activeCategory);
+          if (filtered.length > 0) {
+            const data = filtered.map(p => ({
+              'Kode SKU': p.sku || '-',
+              'Nama Barang': p.name || '-',
+              'Klasifikasi Asal': String(p.origin || activeCategory).toUpperCase(),
+              'Kategori': p.category || '-',
+              'Gudang / Lokasi': p.warehouse || '-',
+              'Kode Rak': p.shelf || '-',
+              'Stok Saat Ini (Pcs)': Number(p.stock || 0),
+              'Stok Min (Pcs)': Number(p.minStock || 0),
+              'Harga Satuan (Rp)': Number(p.price || 0),
+              'Total Nilai Aset (Rp)': Number(p.stock || 0) * Number(p.price || 0),
+              'Supplier Preferred': p.supplier || '-',
+              'Fungsi Sparepart': p.fungsi || '-',
+              'URL Foto Produk': p.image || '-'
+            }));
+            exportCatalogToCSVFallback(data, activeCategory, new Date().toISOString().slice(0, 10));
+            showToast('Export Excel mengalami kendala. File CSV kompatibel Excel berhasil diunduh!', 'error');
+          } else {
+            showToast('Tidak ada data barang untuk diexport!', 'error');
+          }
+        } catch (fallbackError) {
+          console.error('Fallback export juga gagal:', fallbackError);
+          showToast('Export gagal. Silakan coba lagi.', 'error');
+        }
+      } finally {
+        window.__exportCatalogRunning = false;
+        if (button) {
+          button.disabled = false;
+          button.classList.remove('opacity-60', 'pointer-events-none');
+          button.innerHTML = originalButtonHTML;
+        }
+      }
     }
 
     async function handleExcelImport(e) {
