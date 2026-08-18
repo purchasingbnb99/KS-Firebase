@@ -1926,12 +1926,35 @@
 
     function exportCatalogToCSVFallback(data, activeCategory, dateStr) {
       const headers = Object.keys(data[0] || {});
-      const lines = [headers.map(csvEscape).join(',')];
+      // Microsoft Excel Indonesia umumnya menggunakan titik koma sebagai pemisah CSV.
+      // Baris `sep=;` memaksa Excel mengenali setiap field sebagai kolom terpisah.
+      const lines = ['sep=;', headers.map(csvEscape).join(';')];
       data.forEach(row => {
-        lines.push(headers.map(header => csvEscape(row[header])).join(','));
+        lines.push(headers.map(header => csvEscape(row[header])).join(';'));
       });
       const csv = '\uFEFF' + lines.join('\r\n');
       downloadBlobFile(csv, `Data_Katalog_${activeCategory.toUpperCase()}_${dateStr}.csv`, 'text/csv;charset=utf-8');
+    }
+
+    function exportImageValue(image) {
+      const value = String(image || '').trim();
+      if (!value || value === '-') return '-';
+      if (/^https?:\/\//i.test(value)) return value;
+      // Hindari memasukkan base64 gambar yang sangat panjang ke Excel.
+      if (/^data:image\//i.test(value)) return 'Tersedia di aplikasi';
+      return value.length > 300 ? 'Tersedia di aplikasi' : value;
+    }
+
+    async function ensureExportXlsxOrFallback() {
+      return await ensureXlsxLibrary();
+    }
+
+    function exportRowsToCsv(data, filename) {
+      const headers = Object.keys(data[0] || {});
+      const lines = ['sep=;', headers.map(csvEscape).join(';')];
+      data.forEach(row => lines.push(headers.map(header => csvEscape(row[header])).join(';')));
+      const csv = '\uFEFF' + lines.join('\r\n');
+      downloadBlobFile(csv, filename, 'text/csv;charset=utf-8');
     }
 
     function loadScriptOnce(src) {
@@ -2009,7 +2032,7 @@
           'Total Nilai Aset (Rp)': Number(p.stock || 0) * Number(p.price || 0),
           'Supplier Preferred': p.supplier || '-',
           'Fungsi Sparepart': p.fungsi || '-',
-          'URL Foto Produk': p.image || '-'
+          'URL Foto Produk': exportImageValue(p.image)
         }));
 
         const dateStr = new Date().toISOString().slice(0, 10);
@@ -2045,7 +2068,7 @@
               'Total Nilai Aset (Rp)': Number(p.stock || 0) * Number(p.price || 0),
               'Supplier Preferred': p.supplier || '-',
               'Fungsi Sparepart': p.fungsi || '-',
-              'URL Foto Produk': p.image || '-'
+              'URL Foto Produk': exportImageValue(p.image)
             }));
             exportCatalogToCSVFallback(data, activeCategory, new Date().toISOString().slice(0, 10));
             showToast('Export Excel mengalami kendala. File CSV kompatibel Excel berhasil diunduh!', 'error');
@@ -3321,7 +3344,7 @@
       setElementText('report-total-asset', `Rp ${totalAsset.toLocaleString('id-ID')}`);
     }
 
-    function exportToExcel() {
+    async function exportToExcel() {
       const filtered = products.filter(p => reportFilter === 'all' ? true : p.origin === reportFilter);
       if (filtered.length === 0) {
         showToast('Tidak ada data barang untuk diexport!', 'error');
@@ -3329,26 +3352,44 @@
       }
 
       const data = filtered.map(p => ({
-        'Kode SKU': p.sku,
-        'Nama Barang': p.name,
-        'Klasifikasi Asal': p.origin.toUpperCase(),
-        'Kategori': p.category,
-        'Gudang / Lokasi': p.warehouse,
-        'Kode Rak': p.shelf,
-        'Stok Saat Ini (Pcs)': p.stock,
-        'Stok Min (Pcs)': p.minStock,
-        'Harga Satuan (Rp)': p.price,
-        'Total Nilai Aset (Rp)': p.stock * p.price,
-        'Supplier Preferred': p.supplier,
-        'URL Foto Produk': p.image || '-'
+        'Kode SKU': p.sku || '-',
+        'Nama Barang': p.name || '-',
+        'Klasifikasi Asal': String(p.origin || '-').toUpperCase(),
+        'Kategori': p.category || '-',
+        'Gudang / Lokasi': p.warehouse || '-',
+        'Kode Rak': p.shelf || '-',
+        'Stok Saat Ini (Pcs)': Number(p.stock || 0),
+        'Stok Min (Pcs)': Number(p.minStock || 0),
+        'Harga Satuan (Rp)': Number(p.price || 0),
+        'Total Nilai Aset (Rp)': Number(p.stock || 0) * Number(p.price || 0),
+        'Supplier Preferred': p.supplier || '-',
+        'Fungsi Sparepart': p.fungsi || '-',
+        'URL Foto Produk': exportImageValue(p.image)
       }));
 
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Laporan Stok");
       const dateStr = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(wb, "Laporan_Stok_" + reportFilter + "_" + dateStr + ".xlsx");
-      showToast('File Excel Laporan Stok berhasil diunduh!');
+      try {
+        const hasXlsx = await ensureExportXlsxOrFallback();
+        if (hasXlsx) {
+          const ws = window.XLSX.utils.json_to_sheet(data);
+          const wb = window.XLSX.utils.book_new();
+          window.XLSX.utils.book_append_sheet(wb, ws, 'Laporan Stok');
+          window.XLSX.writeFile(wb, 'Laporan_Stok_' + reportFilter + '_' + dateStr + '.xlsx');
+          showToast('File Excel Laporan Stok berhasil diunduh!');
+        } else {
+          exportRowsToCsv(data, 'Laporan_Stok_' + reportFilter + '_' + dateStr + '.csv');
+          showToast('Library Excel tidak tersedia. File CSV yang kompatibel dengan Excel berhasil diunduh!');
+        }
+      } catch (error) {
+        console.error('Export Laporan Stok gagal:', error);
+        try {
+          exportRowsToCsv(data, 'Laporan_Stok_' + reportFilter + '_' + dateStr + '.csv');
+          showToast('Excel gagal dimuat. File CSV kompatibel Excel berhasil diunduh!');
+        } catch (fallbackError) {
+          console.error('Fallback export gagal:', fallbackError);
+          showToast('Export laporan gagal. Silakan coba lagi.', 'error');
+        }
+      }
     }
 
     function setReportPengajuanFilter(type) {
@@ -3405,16 +3446,16 @@
       setElementHTML('report-pengajuan-tbody', rows);
     }
 
-    function exportReportPengajuanToExcel() {
+    async function exportReportPengajuanToExcel() {
       const searchEl = document.getElementById('report-pengajuan-search');
       const search = searchEl ? searchEl.value.toLowerCase().trim() : '';
 
       const filtered = requests.filter(r => {
         const matchesStatus = reportPengajuanFilter === 'all' ? true : r.status === reportPengajuanFilter;
-        const matchesSearch = !search || 
-          (r.productName || '').toLowerCase().includes(search) || 
-          (r.sku || '').toLowerCase().includes(search) || 
-          (r.requester || '').toLowerCase().includes(search) || 
+        const matchesSearch = !search ||
+          (r.productName || '').toLowerCase().includes(search) ||
+          (r.sku || '').toLowerCase().includes(search) ||
+          (r.requester || '').toLowerCase().includes(search) ||
           (r.dept || '').toLowerCase().includes(search) ||
           (r.note || '').toLowerCase().includes(search);
         return matchesStatus && matchesSearch;
@@ -3426,22 +3467,39 @@
       }
 
       const data = filtered.map(r => ({
-        'Tanggal': r.date,
-        'Nama Pemohon': r.requester,
-        'Departemen': r.dept,
-        'SKU Barang': r.sku,
-        'Nama Barang': r.productName,
-        'Jumlah Qty': r.qty,
-        'Keperluan': r.note,
-        'Status': r.status.toUpperCase()
+        'Tanggal': r.date || '-',
+        'Nama Pemohon': r.requester || '-',
+        'Departemen': r.dept || '-',
+        'SKU Barang': r.sku || '-',
+        'Nama Barang': r.productName || '-',
+        'Jumlah Qty': Number(r.qty || 0),
+        'Keperluan': r.note || '-',
+        'Status': String(r.status || '').toUpperCase()
       }));
 
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Laporan Pengajuan");
       const dateStr = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(wb, "Laporan_Pengajuan_" + reportPengajuanFilter + "_" + dateStr + ".xlsx");
-      showToast('File Excel Laporan Pengajuan berhasil diunduh!');
+      try {
+        const hasXlsx = await ensureExportXlsxOrFallback();
+        if (hasXlsx) {
+          const ws = window.XLSX.utils.json_to_sheet(data);
+          const wb = window.XLSX.utils.book_new();
+          window.XLSX.utils.book_append_sheet(wb, ws, 'Laporan Pengajuan');
+          window.XLSX.writeFile(wb, 'Laporan_Pengajuan_' + reportPengajuanFilter + '_' + dateStr + '.xlsx');
+          showToast('File Excel Laporan Pengajuan berhasil diunduh!');
+        } else {
+          exportRowsToCsv(data, 'Laporan_Pengajuan_' + reportPengajuanFilter + '_' + dateStr + '.csv');
+          showToast('Library Excel tidak tersedia. File CSV yang kompatibel dengan Excel berhasil diunduh!');
+        }
+      } catch (error) {
+        console.error('Export Laporan Pengajuan gagal:', error);
+        try {
+          exportRowsToCsv(data, 'Laporan_Pengajuan_' + reportPengajuanFilter + '_' + dateStr + '.csv');
+          showToast('Excel gagal dimuat. File CSV kompatibel Excel berhasil diunduh!');
+        } catch (fallbackError) {
+          console.error('Fallback export gagal:', fallbackError);
+          showToast('Export laporan pengajuan gagal. Silakan coba lagi.', 'error');
+        }
+      }
     }
 
     function updateDatalists() {
