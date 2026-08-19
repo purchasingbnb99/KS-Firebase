@@ -1337,7 +1337,6 @@
       if (!isCloudConnected) {
         showToast('Firebase belum dikonfigurasi. Menggunakan Mode Offline!', 'error');
         refreshCurrentView();
-        
         const connBadge = document.getElementById('connection-status-badge');
         if (connBadge) {
           connBadge.innerText = 'OFFLINE MODE';
@@ -1345,27 +1344,50 @@
         }
         return;
       }
-      
+
+      const btnSync = document.getElementById('btn-sync-cloud');
+      const syncIcon = btnSync ? btnSync.querySelector('i') : null;
+
       try {
-        const btnSync = document.getElementById('btn-sync-cloud');
         if (btnSync) btnSync.classList.add('opacity-50', 'pointer-events-none');
-        const syncIcon = btnSync ? btnSync.querySelector('i') : null;
         if (syncIcon) syncIcon.classList.add('fa-spin');
 
-        const prodSnap = await db.collection('products').get();
-        if (!prodSnap.empty) {
-          products = prodSnap.docs.map(doc => normalizeProductData(doc.data()));
+        // MASTER GUDANG: Firestore adalah sumber data bersama untuk semua user.
+        // Jika collection warehouses belum ada/masih kosong tetapi browser ini
+        // mempunyai data gudang lokal, migrasikan data tersebut ke Firestore sekali.
+        let whSnap = await db.collection('warehouses').get();
+        if (whSnap.empty && warehouses.length > 0) {
+          const seedBatch = db.batch();
+          const now = new Date().toISOString();
+          warehouses.forEach(w => {
+            const whRef = db.collection('warehouses').doc(String(w.id));
+            seedBatch.set(whRef, {
+              id: String(w.id),
+              code: w.code,
+              name: w.name,
+              location: w.location,
+              pic: w.pic,
+              created_at: w.created_at || now,
+              updated_at: now
+            }, { merge: true });
+          });
+          await seedBatch.commit();
+          whSnap = await db.collection('warehouses').get();
         }
+
+        warehouses = whSnap.docs
+          .map(doc => normalizeWarehouseData(doc.data()))
+          .filter(Boolean)
+          .sort((a, b) => String(a.code).localeCompare(String(b.code)));
+
+        const prodSnap = await db.collection('products').get();
+        products = prodSnap.docs.map(doc => normalizeProductData(doc.data()));
 
         const mutSnap = await db.collection('mutations').orderBy('created_at', 'desc').get();
-        if (!mutSnap.empty) {
-          mutations = mutSnap.docs.map(doc => normalizeMutationData(doc.data()));
-        }
+        mutations = mutSnap.docs.map(doc => normalizeMutationData(doc.data()));
 
         const reqSnap = await db.collection('requests').orderBy('created_at', 'desc').get();
-        if (!reqSnap.empty) {
-          requests = reqSnap.docs.map(doc => normalizeRequestData(doc.data()));
-        }
+        requests = reqSnap.docs.map(doc => normalizeRequestData(doc.data()));
 
         saveStateLocally();
         refreshCurrentView();
@@ -1376,45 +1398,57 @@
           connBadge.innerText = 'ONLINE SYSTEM';
           connBadge.className = 'text-[9px] uppercase font-bold tracking-wider text-emerald-300 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30 shadow-[0_0_8px_rgba(16,185,129,0.5)]';
         }
-
-        if (btnSync) btnSync.classList.remove('opacity-50', 'pointer-events-none');
-        if (syncIcon) syncIcon.classList.remove('fa-spin');
       } catch (err) {
-        console.error("ERROR SINKRONISASI FIRESTORE:", err.message);
-        showToast(`Sinkronisasi Gagal: Periksa Rules Firestore.`, 'error');
-        
+        console.error('ERROR SINKRONISASI FIRESTORE:', err);
+        showToast('Sinkronisasi gagal. Periksa koneksi dan Rules Firestore.', 'error');
         const connBadge = document.getElementById('connection-status-badge');
         if (connBadge) {
           connBadge.innerText = 'OFFLINE MODE';
           connBadge.className = 'text-[9px] uppercase font-bold tracking-wider text-rose-300 bg-rose-950/60 px-2 py-0.5 rounded-full border border-rose-500/30';
         }
-
-        const syncIcon = document.querySelector('#btn-sync-cloud i');
+      } finally {
         if (syncIcon) syncIcon.classList.remove('fa-spin');
-        const btnSync = document.getElementById('btn-sync-cloud');
         if (btnSync) btnSync.classList.remove('opacity-50', 'pointer-events-none');
       }
     }
 
     function setupRealtimeSync() {
       if (!isCloudConnected) return;
+
       let isInitProducts = true;
       let isInitMutations = true;
       let isInitRequests = true;
+      let isInitWarehouses = true;
+
+      db.collection('warehouses').orderBy('code').onSnapshot(snapshot => {
+        if (isInitWarehouses) {
+          isInitWarehouses = false;
+          return;
+        }
+        warehouses = snapshot.docs
+          .map(doc => normalizeWarehouseData(doc.data()))
+          .filter(Boolean)
+          .sort((a, b) => String(a.code).localeCompare(String(b.code)));
+        saveStateLocally();
+        refreshCurrentView();
+      }, error => {
+        console.error('Realtime warehouses error:', error);
+        showToast('Sinkronisasi master gudang gagal. Periksa Rules Firestore.', 'error');
+      });
 
       db.collection('products').onSnapshot(snapshot => {
         if(isInitProducts) { isInitProducts = false; return; }
         products = snapshot.docs.map(doc => normalizeProductData(doc.data()));
         saveStateLocally();
         refreshCurrentView();
-      });
+      }, error => console.error('Realtime products error:', error));
 
       db.collection('mutations').orderBy('created_at', 'desc').onSnapshot(snapshot => {
         if(isInitMutations) { isInitMutations = false; return; }
         mutations = snapshot.docs.map(doc => normalizeMutationData(doc.data()));
         saveStateLocally();
         refreshCurrentView();
-      });
+      }, error => console.error('Realtime mutations error:', error));
 
       db.collection('requests').orderBy('created_at', 'desc').onSnapshot(snapshot => {
         if(isInitRequests) { isInitRequests = false; return; }
@@ -1426,19 +1460,33 @@
           const previous = previousRequests.get(id);
           const override = approvalStatusOverrides.get(id);
 
-          // Jangan biarkan snapshot PENDING yang terlambat menghidupkan kembali
-          // tombol SETUJUI setelah transaksi approval sudah berhasil.
           if (override) incoming.status = override;
           else if (previous && ['approved', 'rejected'].includes(String(previous.status || '').toLowerCase())
                    && String(incoming.status || '').toLowerCase() === 'pending') {
             incoming.status = previous.status;
           }
-
           return incoming;
         });
         saveStateLocally();
         refreshCurrentView();
-      });
+      }, error => console.error('Realtime requests error:', error));
+    }
+
+    function normalizeWarehouseData(w) {
+      if (!w) return null;
+      const id = String(w.id || '').trim();
+      const code = String(w.code || '').trim().toUpperCase();
+      const name = String(w.name || '').trim();
+      if (!id || !code || !name) return null;
+      return {
+        id,
+        code,
+        name,
+        location: String(w.location || '').trim(),
+        pic: String(w.pic || '').trim(),
+        created_at: w.created_at || '',
+        updated_at: w.updated_at || ''
+      };
     }
 
     function normalizeProductData(p) {
@@ -3212,7 +3260,7 @@
       clearAllFormErrors();
 
       const id = document.getElementById('edit-wh-id').value;
-      const targetWh = warehouses.find(w => w.id === id);
+      const targetWh = warehouses.find(w => String(w.id) === String(id));
       if (!targetWh) return;
 
       const oldName = targetWh.name;
@@ -3221,31 +3269,67 @@
       const newLocation = document.getElementById('edit-wh-location').value.trim();
       const newPic = document.getElementById('edit-wh-pic').value.trim();
 
-      if (!newCode || !newName || !newLocation || !newPic) {
+      const duplicateCode = warehouses.some(w => String(w.id) !== String(id) && w.code === newCode);
+      if (!newCode || newCode.length < 3) {
+        setFieldError('edit-wh-code', 'err-edit-wh-code', true, 'Kode gudang minimal 3 karakter.');
+        return;
+      }
+      if (duplicateCode) {
+        setFieldError('edit-wh-code', 'err-edit-wh-code', true, `Kode "${newCode}" sudah digunakan!`);
+        return;
+      }
+      if (!newName || !newLocation || !newPic) {
         showToast('Semua kolom master gudang wajib diisi!', 'error');
         return;
       }
 
-      targetWh.code = newCode;
-      targetWh.name = newName;
-      targetWh.location = newLocation;
-      targetWh.pic = newPic;
+      const updatedWh = {
+        id: String(targetWh.id),
+        code: newCode,
+        name: newName,
+        location: newLocation,
+        pic: newPic,
+        created_at: targetWh.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
-      if (oldName !== newName) {
-        for (let p of products) {
-          if (p.warehouse === oldName) {
-             p.warehouse = newName;
-             if(isCloudConnected) {
-                 await db.collection('products').doc(p.id).update({ warehouse: newName });
-             }
+      try {
+        if (isCloudConnected) {
+          const batch = db.batch();
+          const whRef = db.collection('warehouses').doc(String(updatedWh.id));
+          batch.set(whRef, updatedWh, { merge: true });
+
+          if (oldName !== newName) {
+            products.forEach(p => {
+              if (p.warehouse === oldName) {
+                batch.update(db.collection('products').doc(String(p.id)), { warehouse: newName });
+              }
+            });
           }
+          await batch.commit();
         }
-      }
 
-      saveStateLocally();
-      closeModal('modal-edit-warehouse');
-      refreshCurrentView();
-      showToast(`Data gudang "${newName}" berhasil diperbarui!`);
+        targetWh.code = updatedWh.code;
+        targetWh.name = updatedWh.name;
+        targetWh.location = updatedWh.location;
+        targetWh.pic = updatedWh.pic;
+        targetWh.updated_at = updatedWh.updated_at;
+
+        if (oldName !== newName) {
+          products.forEach(p => {
+            if (p.warehouse === oldName) p.warehouse = newName;
+          });
+        }
+
+        warehouses.sort((a, b) => String(a.code).localeCompare(String(b.code)));
+        saveStateLocally();
+        closeModal('modal-edit-warehouse');
+        refreshCurrentView();
+        showToast(`Data gudang "${newName}" berhasil diperbarui!`);
+      } catch (err) {
+        console.error('Error edit warehouse:', err);
+        showToast('Gagal menyimpan perubahan master gudang. Data lokal tidak diubah.', 'error');
+      }
     }
 
     async function handleWarehouseTransferSubmit(e) {
@@ -3340,7 +3424,7 @@
 
     function deleteWarehouse(id) {
       if (currentRole !== 'admin') return;
-      const targetWh = warehouses.find(w => w.id === id);
+      const targetWh = warehouses.find(w => String(w.id) === String(id));
       if (!targetWh) return;
 
       if (products.some(p => p.warehouse === targetWh.name)) {
@@ -3351,16 +3435,25 @@
       customConfirm(
         'Hapus Gudang',
         `Apakah Anda yakin ingin menghapus gudang "${targetWh.name}" (${targetWh.code})?`,
-        function() {
-          warehouses = warehouses.filter(w => w.id !== id);
-          saveStateLocally();
-          renderWarehouseCards();
-          showToast(`Gudang "${targetWh.name}" dihapus!`);
+        async function() {
+          try {
+            if (isCloudConnected) {
+              await db.collection('warehouses').doc(String(targetWh.id)).delete();
+            }
+
+            warehouses = warehouses.filter(w => String(w.id) !== String(id));
+            saveStateLocally();
+            renderWarehouseCards();
+            showToast(`Gudang "${targetWh.name}" dihapus!`);
+          } catch (err) {
+            console.error('Error delete warehouse:', err);
+            showToast('Gagal menghapus gudang dari database. Data tidak diubah.', 'error');
+          }
         }
       );
     }
 
-    function handleAddWarehouseSubmit(e) {
+    async function handleAddWarehouseSubmit(e) {
       e.preventDefault();
       if (currentRole !== 'admin') return;
       clearAllFormErrors();
@@ -3369,6 +3462,8 @@
       const nameInput = document.getElementById('add-wh-name');
       const locInput = document.getElementById('add-wh-location');
       const picInput = document.getElementById('add-wh-pic');
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      const originalBtnContent = submitBtn ? submitBtn.innerHTML : 'Simpan';
 
       const code = codeInput.value.trim().toUpperCase();
       const name = nameInput.value.trim();
@@ -3376,8 +3471,9 @@
       const pic = picInput.value.trim();
 
       let isValid = true;
-      if (!code || code.length < 3 || warehouses.some(w => w.code === code)) {
-        setFieldError('add-wh-code', 'err-wh-code', true, warehouses.some(w => w.code === code) ? `Kode "${code}" sudah digunakan!` : 'Kode gudang min 3 karakter.');
+      const duplicateLocal = warehouses.some(w => w.code === code);
+      if (!code || code.length < 3 || duplicateLocal) {
+        setFieldError('add-wh-code', 'err-wh-code', true, duplicateLocal ? `Kode "${code}" sudah digunakan!` : 'Kode gudang min 3 karakter.');
         isValid = false;
       }
       if (!name) {
@@ -3392,23 +3488,45 @@
         setFieldError('add-wh-pic', 'err-wh-pic', true);
         isValid = false;
       }
-
       if (!isValid) return;
 
+      const now = new Date().toISOString();
       const newWh = {
-        id: 'wh-' + Date.now(),
+        id: 'wh-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
         code,
         name,
         location,
-        pic
+        pic,
+        created_at: now,
+        updated_at: now
       };
 
-      warehouses.push(newWh);
-      saveStateLocally();
-      closeModal('modal-add-warehouse');
-      e.target.reset();
-      renderWarehouseCards();
-      showToast(`Master gudang "${newWh.name}" ditambahkan!`);
+      try {
+        if (submitBtn) {
+          submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Menyimpan...';
+          submitBtn.disabled = true;
+        }
+
+        if (isCloudConnected) {
+          await db.collection('warehouses').doc(String(newWh.id)).set(newWh, { merge: true });
+        }
+
+        warehouses.push(newWh);
+        warehouses.sort((a, b) => String(a.code).localeCompare(String(b.code)));
+        saveStateLocally();
+        closeModal('modal-add-warehouse');
+        e.target.reset();
+        renderWarehouseCards();
+        showToast(`Master gudang "${newWh.name}" ditambahkan!`);
+      } catch (err) {
+        console.error('Error add warehouse:', err);
+        showToast('Gagal menyimpan master gudang ke database. Data tidak ditambahkan.', 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.innerHTML = originalBtnContent;
+          submitBtn.disabled = false;
+        }
+      }
     }
 
     function renderMutasiTable() {
