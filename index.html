@@ -442,6 +442,7 @@
                     <th class="p-3 text-center">Jumlah</th>
                     <th class="p-3">Keperluan</th>
                     <th class="p-3 text-center">Status</th>
+                    <th class="p-3">Keterangan</th>
                     <th class="p-3 text-center">Aksi</th>
                   </tr>
                 </thead>
@@ -683,6 +684,7 @@
                   <th class="py-2.5 px-3 text-center">Jumlah</th>
                   <th class="py-2.5 px-3">Keperluan</th>
                   <th class="py-2.5 px-3 text-center">Status</th>
+                  <th class="py-2.5 px-3">Alasan Penolakan</th>
                 </tr>
               </thead>
               <tbody id="report-pengajuan-tbody" class="divide-y divide-slate-800 print:divide-slate-200"></tbody>
@@ -731,6 +733,34 @@
             <button type="submit" class="w-1/2 py-2 text-xs font-bold text-slate-950 bg-orange-400 hover:bg-orange-300 rounded-xl transition shadow-md">Masuk Admin</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Modal Alasan Penolakan / Edit Keterangan -->
+    <div id="modal-reject-reason" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[75] flex items-center justify-center p-4">
+      <div class="bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-800">
+        <div class="flex items-start gap-3 mb-4">
+          <div class="w-11 h-11 bg-rose-950/60 text-rose-400 border border-rose-500/30 rounded-full flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-comment-dots text-lg"></i>
+          </div>
+          <div>
+            <h3 id="reject-reason-title" class="font-bold text-white text-base">Alasan Penolakan Pengajuan</h3>
+            <p id="reject-reason-subtitle" class="text-xs text-slate-400 mt-1">Masukkan alasan agar pemohon dapat mengetahui penyebab penolakan.</p>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="text-xs font-bold text-slate-300 block mb-1">Keterangan / Alasan *</label>
+          <textarea id="reject-reason-input" rows="4" maxlength="500" placeholder="Contoh: Stok tidak mencukupi / spesifikasi tidak sesuai / pengajuan belum mendapat persetujuan atasan..." class="w-full px-3 py-2.5 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none resize-y"></textarea>
+          <span class="error-text hidden" id="err-reject-reason">Alasan penolakan wajib diisi minimal 3 karakter.</span>
+        </div>
+
+        <div class="flex gap-2">
+          <button type="button" onclick="closeModal('modal-reject-reason')" class="w-1/2 py-2.5 text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-xl transition">Batal</button>
+          <button type="button" id="btn-save-reject-reason" onclick="saveRejectReason()" class="w-1/2 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition shadow-md">
+            <i class="fa-solid fa-ban mr-2"></i> Simpan Penolakan
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1530,20 +1560,43 @@
       };
     }
 
+    function formatDateTimeLocal(value) {
+      const d = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(d.getTime())) return '';
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
     function normalizeMutationData(m) {
       return {
-        id: m.id, date: m.date || (m.created_at ? new Date(m.created_at).toISOString().replace('T', ' ').slice(0, 16) : ''),
-        sku: m.sku, productName: m.product_name, type: m.type, qty: m.change_qty,
-        initialStock: m.initial_stock, finalStock: m.final_stock,
-        note: m.note, user: m.operator || 'System'
+        id: m.id,
+        // Gunakan waktu lokal browser dari created_at Firestore (UTC) agar jam sesuai laptop.
+        date: m.created_at ? formatDateTimeLocal(m.created_at) : (m.date || ''),
+        sku: m.sku,
+        productName: m.product_name,
+        type: m.type,
+        qty: m.change_qty,
+        initialStock: m.initial_stock,
+        finalStock: m.final_stock,
+        note: m.note,
+        user: m.operator || 'System'
       };
     }
 
     function normalizeRequestData(r) {
       return {
-        id: r.id, date: r.date || (r.created_at ? new Date(r.created_at).toISOString().replace('T', ' ').slice(0, 16) : ''),
-        sku: r.sku, productName: r.product_name, origin: r.origin, qty: r.qty,
-        requester: r.requester, dept: r.dept, note: r.note, status: r.status
+        id: r.id,
+        // Prioritaskan created_at Firestore agar data lama juga otomatis tampil sesuai zona waktu browser.
+        date: r.created_at ? formatDateTimeLocal(r.created_at) : (r.date || ''),
+        sku: r.sku,
+        productName: r.product_name,
+        origin: r.origin,
+        qty: r.qty,
+        requester: r.requester,
+        dept: r.dept,
+        note: r.note,
+        status: r.status,
+        rejectReason: r.reject_reason || ''
       };
     }
 
@@ -2130,7 +2183,7 @@
           'URL Foto Produk': exportImageValue(p.image)
         }));
 
-        const dateStr = new Date().toISOString().slice(0, 10);
+        const dateStr = formatDateTimeLocal(new Date()).slice(0, 10);
         const hasXlsx = await ensureXlsxLibrary();
 
         if (hasXlsx) {
@@ -2667,7 +2720,8 @@
     }
 
     function getCurrentTimeStr() {
-      return new Date().toISOString().replace('T', ' ').slice(0, 16);
+      // Waktu yang ditampilkan/dicatat di UI mengikuti zona waktu lokal browser/laptop.
+      return formatDateTimeLocal(new Date());
     }
 
     async function handleInboundSubmit(e) {
@@ -2832,7 +2886,8 @@
           requester,
           dept,
           note,
-          status: 'pending'
+          status: 'pending',
+          rejectReason: ''
         };
 
         requests.unshift(newReq);
@@ -2842,6 +2897,7 @@
             id: newReq.id, sku: newReq.sku, product_name: newReq.productName,
             origin: newReq.origin, qty: newReq.qty, requester: newReq.requester,
             dept: newReq.dept, note: newReq.note, status: 'pending',
+            reject_reason: '',
             created_at: new Date().toISOString()
           }).catch(err => console.warn(err));
         }
@@ -2880,7 +2936,9 @@
       setElementText('doc-req-sku', reqData.sku);
       setElementText('doc-req-item', reqData.productName);
       setElementText('doc-req-qty', `${reqData.qty} Pcs`);
-      setElementText('doc-req-note', reqData.note);
+      setElementText('doc-req-note', reqData.status === 'rejected'
+        ? `${reqData.note}${reqData.rejectReason ? ' | Alasan Penolakan: ' + reqData.rejectReason : ''}`
+        : reqData.note);
       setElementText('doc-sign-pemohon', `( ${reqData.requester} )`);
 
       openModal('modal-print-request');
@@ -2901,41 +2959,161 @@
     // being briefly rendered as PENDING if a realtime snapshot arrives out of order.
     const approvalStatusOverrides = new Map();
 
+    function escapeHtml(value = '') {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function openRejectReasonModal(reqId) {
+      if (currentRole !== 'admin') return;
+      const req = requests.find(r => String(r.id) === String(reqId));
+      if (!req) return;
+
+      const input = document.getElementById('reject-reason-input');
+      const btn = document.getElementById('btn-save-reject-reason');
+      const title = document.getElementById('reject-reason-title');
+      const subtitle = document.getElementById('reject-reason-subtitle');
+
+      window.currentRejectRequestId = String(reqId);
+
+      if (title) {
+        title.innerText = String(req.status || '').toLowerCase() === 'rejected'
+          ? 'Ubah Keterangan Penolakan'
+          : 'Alasan Penolakan Pengajuan';
+      }
+      if (subtitle) {
+        subtitle.innerText = String(req.status || '').toLowerCase() === 'rejected'
+          ? `Perbarui keterangan untuk pengajuan "${req.productName || '-'}".`
+          : `Masukkan alasan agar pemohon mengetahui penyebab pengajuan "${req.productName || '-'}" ditolak.`;
+      }
+      if (input) {
+        input.value = req.rejectReason || '';
+        input.classList.remove('input-error');
+      }
+      if (btn) {
+        btn.innerHTML = String(req.status || '').toLowerCase() === 'rejected'
+          ? '<i class="fa-solid fa-pen-to-square mr-2"></i> Simpan Keterangan'
+          : '<i class="fa-solid fa-ban mr-2"></i> Simpan Penolakan';
+        btn.disabled = false;
+      }
+      setFieldError('reject-reason-input', 'err-reject-reason', false);
+      openModal('modal-reject-reason');
+      setTimeout(() => input && input.focus(), 50);
+    }
+
+    async function saveRejectReason() {
+      if (currentRole !== 'admin') return;
+
+      const reqId = window.currentRejectRequestId;
+      const req = requests.find(r => String(r.id) === String(reqId));
+      const input = document.getElementById('reject-reason-input');
+      const btn = document.getElementById('btn-save-reject-reason');
+      if (!req || !input) return;
+
+      const reason = input.value.trim();
+      if (!reason || reason.length < 3) {
+        setFieldError('reject-reason-input', 'err-reject-reason', true);
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Menyimpan...';
+      }
+
+      const previousStatus = String(req.status || '').toLowerCase();
+      const wasRejected = previousStatus === 'rejected';
+
+      try {
+        if (isCloudConnected) {
+          await db.collection('requests').doc(String(reqId)).update({
+            status: 'rejected',
+            reject_reason: reason
+          });
+        }
+
+        req.status = 'rejected';
+        req.rejectReason = reason;
+        approvalStatusOverrides.set(String(reqId), 'rejected');
+
+        saveStateLocally();
+        closeModal('modal-reject-reason');
+        refreshCurrentView();
+
+        showToast(
+          wasRejected
+            ? 'Keterangan penolakan berhasil diperbarui!'
+            : 'Pengajuan ditolak dan keterangan berhasil disimpan!',
+          'error'
+        );
+      } catch (error) {
+        console.error('Gagal menyimpan alasan penolakan:', error);
+        showToast('Gagal menyimpan keterangan penolakan.', 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = wasRejected
+            ? '<i class="fa-solid fa-pen-to-square mr-2"></i> Simpan Keterangan'
+            : '<i class="fa-solid fa-ban mr-2"></i> Simpan Penolakan';
+        }
+      }
+    }
+
     function renderApprovalTable() {
       if (requests.length === 0) {
-        setElementHTML('approval-tbody', `<tr><td colspan="7" class="p-6 text-center text-slate-500 font-medium">Belum ada pengajuan barang.</td></tr>`);
+        setElementHTML('approval-tbody', `<tr><td colspan="8" class="p-6 text-center text-slate-500 font-medium">Belum ada pengajuan barang.</td></tr>`);
         return;
       }
 
       const rows = requests.map(r => {
         const badgeClass = getRequestBadgeClass(r.status);
-        
-        // Gunakan status override sesi bila status Firestore/lokal sempat datang terlambat.
+
         const overrideStatus = approvalStatusOverrides.get(String(r.id));
         const currentStatus = String(overrideStatus || r.status || '').toLowerCase();
         if (overrideStatus) r.status = overrideStatus;
-        
-        let actionButtons = currentStatus === 'pending' ? `
-          <div class="flex items-center justify-center gap-1.5">
-            <button onclick="approveRequest('${r.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded-lg font-bold text-[10px] transition shadow-sm">Setujui</button>
-            <button onclick="rejectRequest('${r.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-2 py-1 rounded-lg font-bold text-[10px] transition shadow-sm">Tolak</button>
-            <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs transition border border-slate-700"><i class="fa-solid fa-print"></i></button>
-          </div>` : `
-          <div class="flex items-center justify-center">
-            <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold transition border border-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-print"></i> Cetak Form</button>
-          </div>`;
+
+        let actionButtons = '';
+        if (currentStatus === 'pending') {
+          actionButtons = `
+            <div class="flex items-center justify-center gap-1.5">
+              <button onclick="approveRequest('${r.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded-lg font-bold text-[10px] transition shadow-sm">Setujui</button>
+              <button onclick="rejectRequest('${r.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-2 py-1 rounded-lg font-bold text-[10px] transition shadow-sm">Tolak</button>
+              <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs transition border border-slate-700"><i class="fa-solid fa-print"></i></button>
+            </div>`;
+        } else if (currentStatus === 'rejected') {
+          actionButtons = `
+            <div class="flex items-center justify-center gap-1.5">
+              <button onclick="openRejectReasonModal('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-amber-300 px-2 py-1 rounded-lg text-[10px] font-bold transition border border-slate-700 flex items-center gap-1">
+                <i class="fa-solid fa-pen-to-square"></i> Keterangan
+              </button>
+              <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold transition border border-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-print"></i> Cetak Form</button>
+            </div>`;
+        } else {
+          actionButtons = `
+            <div class="flex items-center justify-center">
+              <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold transition border border-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-print"></i> Cetak Form</button>
+            </div>`;
+        }
+
+        const rejectReason = escapeHtml(r.rejectReason || '-');
 
         return `
         <tr class="hover:bg-slate-800/50 transition">
-          <td class="p-3 font-mono text-slate-400">${r.date}</td>
-          <td class="p-3 font-bold text-white">${r.productName}</td>
-          <td class="p-3 text-slate-300">${r.requester} (${r.dept})</td>
+          <td class="p-3 font-mono text-slate-400">${escapeHtml(r.date)}</td>
+          <td class="p-3 font-bold text-white">${escapeHtml(r.productName)}</td>
+          <td class="p-3 text-slate-300">${escapeHtml(r.requester)} (${escapeHtml(r.dept)})</td>
           <td class="p-3 text-center font-bold text-orange-400">${r.qty} Pcs</td>
-          <td class="p-3 text-slate-300">${r.note}</td>
-          <td class="p-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${badgeClass}">${r.status}</span></td>
+          <td class="p-3 text-slate-300">${escapeHtml(r.note)}</td>
+          <td class="p-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${badgeClass}">${escapeHtml(r.status)}</span></td>
+          <td class="p-3 text-slate-300 ${currentStatus === 'rejected' ? 'text-rose-200' : 'text-slate-600'}">${rejectReason}</td>
           <td class="p-3 text-center">${actionButtons}</td>
         </tr>`;
       }).join('');
+
       setElementHTML('approval-tbody', rows);
     }
 
@@ -3047,12 +3225,14 @@
             });
 
             transaction.update(requestRef, {
-              status: 'approved'
+              status: 'approved',
+              reject_reason: ''
             });
           });
 
           // Apply local state only after Firestore confirms the transaction.
           req.status = 'approved';
+          req.rejectReason = '';
           target.stock = Number(committedStock);
           mutations.unshift({
             id: mutationId,
@@ -3127,32 +3307,18 @@
       }
     }
 
-    async function rejectRequest(reqId) {
+    function rejectRequest(reqId) {
       if (currentRole !== 'admin') return;
-      
-      const req = requests.find(r => r.id === reqId);
+      const req = requests.find(r => String(r.id) === String(reqId));
       if (!req) return;
 
       const statusCheck = (req.status || '').toLowerCase();
-      if (statusCheck !== 'pending') return;
-
-      try {
-        // 1. OPTIMISTIC UPDATE
-        req.status = 'rejected';
-        approvalStatusOverrides.set(String(reqId), 'rejected');
-        saveStateLocally();
-        refreshCurrentView();
-        showToast('Permintaan ditolak!', 'error');
-
-        // 2. BACKGROUND SYNC
-        if (isCloudConnected) {
-          db.collection('requests').doc(String(reqId)).update({
-              status: 'rejected'
-          }).catch(err => console.warn(err));
-        }
-      } catch (error) {
-         console.error("Gagal menolak request:", error);
+      if (statusCheck !== 'pending') {
+        openRejectReasonModal(reqId);
+        return;
       }
+
+      openRejectReasonModal(reqId);
     }
 
     async function handleStockAdjustmentSubmit(e) {
@@ -3748,7 +3914,7 @@
         'URL Foto Produk': exportImageValue(p.image)
       }));
 
-      const dateStr = new Date().toISOString().slice(0, 10);
+      const dateStr = formatDateTimeLocal(new Date()).slice(0, 10);
       try {
         const hasXlsx = await ensureExportXlsxOrFallback();
         if (hasXlsx) {
@@ -3803,12 +3969,13 @@
           (r.sku || '').toLowerCase().includes(search) || 
           (r.requester || '').toLowerCase().includes(search) || 
           (r.dept || '').toLowerCase().includes(search) ||
-          (r.note || '').toLowerCase().includes(search);
+          (r.note || '').toLowerCase().includes(search) ||
+          (r.rejectReason || '').toLowerCase().includes(search);
         return matchesStatus && matchesSearch;
       });
 
       if (filtered.length === 0) {
-        setElementHTML('report-pengajuan-tbody', `<tr><td colspan="6" class="py-6 text-center text-slate-500 font-medium">Belum ada data pengajuan yang sesuai.</td></tr>`);
+        setElementHTML('report-pengajuan-tbody', `<tr><td colspan="7" class="py-6 text-center text-slate-500 font-medium">Belum ada data pengajuan yang sesuai.</td></tr>`);
         return;
       }
 
@@ -3822,6 +3989,7 @@
           <td class="py-2 px-3 text-center font-bold text-orange-400 print:text-black">${r.qty} Pcs</td>
           <td class="py-2 px-3 text-slate-300 print:text-black">${r.note}</td>
           <td class="py-2 px-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase print:text-black print:border-slate-400 ${badgeClass}">${r.status}</span></td>
+          <td class="py-2 px-3 text-slate-300 print:text-black">${r.status === 'rejected' ? escapeHtml(r.rejectReason || '-') : '-'}</td>
         </tr>`;
       }).join('');
       setElementHTML('report-pengajuan-tbody', rows);
@@ -3838,7 +4006,8 @@
           (r.sku || '').toLowerCase().includes(search) ||
           (r.requester || '').toLowerCase().includes(search) ||
           (r.dept || '').toLowerCase().includes(search) ||
-          (r.note || '').toLowerCase().includes(search);
+          (r.note || '').toLowerCase().includes(search) ||
+          (r.rejectReason || '').toLowerCase().includes(search);
         return matchesStatus && matchesSearch;
       });
 
@@ -3855,10 +4024,11 @@
         'Nama Barang': r.productName || '-',
         'Jumlah Qty': Number(r.qty || 0),
         'Keperluan': r.note || '-',
-        'Status': String(r.status || '').toUpperCase()
+        'Status': String(r.status || '').toUpperCase(),
+        'Alasan Penolakan': r.status === 'rejected' ? (r.rejectReason || '-') : '-'
       }));
 
-      const dateStr = new Date().toISOString().slice(0, 10);
+      const dateStr = formatDateTimeLocal(new Date()).slice(0, 10);
       try {
         const hasXlsx = await ensureExportXlsxOrFallback();
         if (hasXlsx) {
