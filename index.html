@@ -578,28 +578,34 @@
         </section>
 
         <section id="tab-report-view" class="tab-view hidden space-y-6">
-          <div class="print:hidden bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-800 flex flex-col xl:flex-row items-center justify-between gap-4">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="text-xs font-bold text-slate-300">Filter Laporan:</span>
-              <button onclick="setReportFilter('all')" id="btn-report-all" class="btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-orange-400 text-slate-950">Semua Barang</button>
-              <button onclick="setReportFilter('lokal')" id="btn-report-lokal" class="btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-slate-800 text-slate-300 hover:bg-slate-700">Barang Lokal</button>
-              <button onclick="setReportFilter('import')" id="btn-report-import" class="btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-slate-800 text-slate-300 hover:bg-slate-700">✈️ Barang Import</button>
-              <span class="ml-2 text-[10px] font-semibold text-slate-500">Periode aktivitas mutasi:</span>
-              <input type="date" id="report-start-date" onchange="handleReportDateFilterChange()" class="bg-slate-950 text-white border border-slate-700 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" aria-label="Tanggal mulai laporan" />
-              <span class="text-xs text-slate-500">s/d</span>
-              <input type="date" id="report-end-date" onchange="handleReportDateFilterChange()" class="bg-slate-950 text-white border border-slate-700 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" aria-label="Tanggal akhir laporan" />
-              <button onclick="resetReportDateFilter()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold transition border border-slate-700" title="Hapus filter tanggal">
-                <i class="fa-solid fa-rotate-left mr-1"></i> Reset Tanggal
-              </button>
-            </div>
+          <div class="print:hidden bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-800">
+            <div class="grid grid-cols-1 xl:grid-cols-[max-content_minmax(0,1fr)_max-content] gap-x-3 gap-y-2 items-start">
+              <span class="text-xs font-bold text-slate-300 self-center">Filter Laporan:</span>
 
-            <div class="flex items-center gap-2 shrink-0">
-              <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
-                <i class="fa-solid fa-file-excel"></i> Export Excel
-              </button>
-              <button onclick="printStockReport()" class="bg-orange-400 hover:bg-orange-300 text-slate-950 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
-                <i class="fa-solid fa-print"></i> Cetak PDF / Print
-              </button>
+              <div class="flex flex-wrap items-center gap-2">
+                <button onclick="setReportFilter('all')" id="btn-report-all" class="btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-orange-400 text-slate-950">Semua Barang</button>
+                <button onclick="setReportFilter('lokal')" id="btn-report-lokal" class="btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-slate-800 text-slate-300 hover:bg-slate-700">Barang Lokal</button>
+                <button onclick="setReportFilter('import')" id="btn-report-import" class="btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-slate-800 text-slate-300 hover:bg-slate-700">✈️ Barang Import</button>
+              </div>
+
+              <div class="row-span-2 flex items-center justify-end gap-2 shrink-0">
+                <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                  <i class="fa-solid fa-file-excel"></i> Export Excel
+                </button>
+                <button onclick="printStockReport()" class="bg-orange-400 hover:bg-orange-300 text-slate-950 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                  <i class="fa-solid fa-print"></i> Cetak PDF / Print
+                </button>
+              </div>
+
+              <div class="xl:col-start-2 flex flex-wrap items-center gap-2 pl-0">
+                <span class="text-[10px] font-semibold text-slate-500">Periode aktivitas mutasi:</span>
+                <input type="date" id="report-start-date" onchange="handleReportDateFilterChange()" class="bg-slate-950 text-white border border-slate-700 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" aria-label="Tanggal mulai laporan" />
+                <span class="text-xs text-slate-500">s/d</span>
+                <input type="date" id="report-end-date" onchange="handleReportDateFilterChange()" class="bg-slate-950 text-white border border-slate-700 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" aria-label="Tanggal akhir laporan" />
+                <button onclick="resetReportDateFilter()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold transition border border-slate-700" title="Hapus filter tanggal">
+                  <i class="fa-solid fa-rotate-left mr-1"></i> Reset Tanggal
+                </button>
+              </div>
             </div>
           </div>
 
