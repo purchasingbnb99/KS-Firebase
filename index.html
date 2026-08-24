@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-08-18-export-fix-v2" />
+  <meta name="app-build" content="2026-08-24-report-date-filter-v1" />
   <title>System Stok Digital - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23fb923c'/><text x='50%' y='68%' font-size='65' font-weight='900' font-family='sans-serif' fill='white' text-anchor='middle'>A</text></svg>">
@@ -442,7 +442,6 @@
                     <th class="p-3 text-center">Jumlah</th>
                     <th class="p-3">Keperluan</th>
                     <th class="p-3 text-center">Status</th>
-                    <th class="p-3">Keterangan</th>
                     <th class="p-3 text-center">Aksi</th>
                   </tr>
                 </thead>
@@ -579,19 +578,26 @@
         </section>
 
         <section id="tab-report-view" class="tab-view hidden space-y-6">
-          <div class="print:hidden bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div class="flex items-center gap-2">
+          <div class="print:hidden bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-800 flex flex-col xl:flex-row items-center justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-2">
               <span class="text-xs font-bold text-slate-300">Filter Laporan:</span>
               <button onclick="setReportFilter('all')" id="btn-report-all" class="btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-orange-400 text-slate-950">Semua Barang</button>
               <button onclick="setReportFilter('lokal')" id="btn-report-lokal" class="btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-slate-800 text-slate-300 hover:bg-slate-700">Barang Lokal</button>
               <button onclick="setReportFilter('import')" id="btn-report-import" class="btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-slate-800 text-slate-300 hover:bg-slate-700">✈️ Barang Import</button>
+              <span class="ml-2 text-[10px] font-semibold text-slate-500">Periode aktivitas mutasi:</span>
+              <input type="date" id="report-start-date" onchange="handleReportDateFilterChange()" class="bg-slate-950 text-white border border-slate-700 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" aria-label="Tanggal mulai laporan" />
+              <span class="text-xs text-slate-500">s/d</span>
+              <input type="date" id="report-end-date" onchange="handleReportDateFilterChange()" class="bg-slate-950 text-white border border-slate-700 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400" aria-label="Tanggal akhir laporan" />
+              <button onclick="resetReportDateFilter()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold transition border border-slate-700" title="Hapus filter tanggal">
+                <i class="fa-solid fa-rotate-left mr-1"></i> Reset Tanggal
+              </button>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 shrink-0">
               <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
                 <i class="fa-solid fa-file-excel"></i> Export Excel
               </button>
-              <button onclick="window.print()" class="bg-orange-400 hover:bg-orange-300 text-slate-950 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+              <button onclick="printStockReport()" class="bg-orange-400 hover:bg-orange-300 text-slate-950 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
                 <i class="fa-solid fa-print"></i> Cetak PDF / Print
               </button>
             </div>
@@ -605,6 +611,7 @@
               </div>
               <div class="text-right text-xs">
                 <p class="font-bold text-white print:text-black">Kategori: <span id="report-filter-label" class="uppercase text-orange-400 print:text-orange-600">SEMUA</span></p>
+                <p class="font-bold text-white print:text-black">Periode: <span id="report-period-label" class="text-orange-400 print:text-orange-600">SEMUA DATA</span></p>
                 <p class="text-slate-400 print:text-slate-500">Tanggal Cetak: <span id="report-print-date">11/08/2026</span></p>
               </div>
             </div>
@@ -684,7 +691,6 @@
                   <th class="py-2.5 px-3 text-center">Jumlah</th>
                   <th class="py-2.5 px-3">Keperluan</th>
                   <th class="py-2.5 px-3 text-center">Status</th>
-                  <th class="py-2.5 px-3">Alasan Penolakan</th>
                 </tr>
               </thead>
               <tbody id="report-pengajuan-tbody" class="divide-y divide-slate-800 print:divide-slate-200"></tbody>
@@ -733,34 +739,6 @@
             <button type="submit" class="w-1/2 py-2 text-xs font-bold text-slate-950 bg-orange-400 hover:bg-orange-300 rounded-xl transition shadow-md">Masuk Admin</button>
           </div>
         </form>
-      </div>
-    </div>
-
-    <!-- Modal Alasan Penolakan / Edit Keterangan -->
-    <div id="modal-reject-reason" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[75] flex items-center justify-center p-4">
-      <div class="bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-800">
-        <div class="flex items-start gap-3 mb-4">
-          <div class="w-11 h-11 bg-rose-950/60 text-rose-400 border border-rose-500/30 rounded-full flex items-center justify-center shrink-0">
-            <i class="fa-solid fa-comment-dots text-lg"></i>
-          </div>
-          <div>
-            <h3 id="reject-reason-title" class="font-bold text-white text-base">Alasan Penolakan Pengajuan</h3>
-            <p id="reject-reason-subtitle" class="text-xs text-slate-400 mt-1">Masukkan alasan agar pemohon dapat mengetahui penyebab penolakan.</p>
-          </div>
-        </div>
-
-        <div class="mb-4">
-          <label class="text-xs font-bold text-slate-300 block mb-1">Keterangan / Alasan *</label>
-          <textarea id="reject-reason-input" rows="4" maxlength="500" placeholder="Contoh: Stok tidak mencukupi / spesifikasi tidak sesuai / pengajuan belum mendapat persetujuan atasan..." class="w-full px-3 py-2.5 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none resize-y"></textarea>
-          <span class="error-text hidden" id="err-reject-reason">Alasan penolakan wajib diisi minimal 3 karakter.</span>
-        </div>
-
-        <div class="flex gap-2">
-          <button type="button" onclick="closeModal('modal-reject-reason')" class="w-1/2 py-2.5 text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-xl transition">Batal</button>
-          <button type="button" id="btn-save-reject-reason" onclick="saveRejectReason()" class="w-1/2 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition shadow-md">
-            <i class="fa-solid fa-ban mr-2"></i> Simpan Penolakan
-          </button>
-        </div>
       </div>
     </div>
 
@@ -1352,6 +1330,8 @@
     let isAdminAuthenticated = false;
     let currentTab = 'dashboard';
     let reportFilter = 'all';
+    let reportStartDate = '';
+    let reportEndDate = '';
     let reportPengajuanFilter = 'all';
     let tempUploadedImageData = '';
     let tempEditUploadedImageData = '';
@@ -1560,43 +1540,20 @@
       };
     }
 
-    function formatDateTimeLocal(value) {
-      const d = value instanceof Date ? value : new Date(value);
-      if (Number.isNaN(d.getTime())) return '';
-      const pad = n => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    }
-
     function normalizeMutationData(m) {
       return {
-        id: m.id,
-        // Gunakan waktu lokal browser dari created_at Firestore (UTC) agar jam sesuai laptop.
-        date: m.created_at ? formatDateTimeLocal(m.created_at) : (m.date || ''),
-        sku: m.sku,
-        productName: m.product_name,
-        type: m.type,
-        qty: m.change_qty,
-        initialStock: m.initial_stock,
-        finalStock: m.final_stock,
-        note: m.note,
-        user: m.operator || 'System'
+        id: m.id, date: m.date || (m.created_at ? new Date(m.created_at).toISOString().replace('T', ' ').slice(0, 16) : ''),
+        sku: m.sku, productName: m.product_name, type: m.type, qty: m.change_qty,
+        initialStock: m.initial_stock, finalStock: m.final_stock,
+        note: m.note, user: m.operator || 'System'
       };
     }
 
     function normalizeRequestData(r) {
       return {
-        id: r.id,
-        // Prioritaskan created_at Firestore agar data lama juga otomatis tampil sesuai zona waktu browser.
-        date: r.created_at ? formatDateTimeLocal(r.created_at) : (r.date || ''),
-        sku: r.sku,
-        productName: r.product_name,
-        origin: r.origin,
-        qty: r.qty,
-        requester: r.requester,
-        dept: r.dept,
-        note: r.note,
-        status: r.status,
-        rejectReason: r.reject_reason || ''
+        id: r.id, date: r.date || (r.created_at ? new Date(r.created_at).toISOString().replace('T', ' ').slice(0, 16) : ''),
+        sku: r.sku, productName: r.product_name, origin: r.origin, qty: r.qty,
+        requester: r.requester, dept: r.dept, note: r.note, status: r.status
       };
     }
 
@@ -2183,7 +2140,7 @@
           'URL Foto Produk': exportImageValue(p.image)
         }));
 
-        const dateStr = formatDateTimeLocal(new Date()).slice(0, 10);
+        const dateStr = new Date().toISOString().slice(0, 10);
         const hasXlsx = await ensureXlsxLibrary();
 
         if (hasXlsx) {
@@ -2720,8 +2677,7 @@
     }
 
     function getCurrentTimeStr() {
-      // Waktu yang ditampilkan/dicatat di UI mengikuti zona waktu lokal browser/laptop.
-      return formatDateTimeLocal(new Date());
+      return new Date().toISOString().replace('T', ' ').slice(0, 16);
     }
 
     async function handleInboundSubmit(e) {
@@ -2886,8 +2842,7 @@
           requester,
           dept,
           note,
-          status: 'pending',
-          rejectReason: ''
+          status: 'pending'
         };
 
         requests.unshift(newReq);
@@ -2897,7 +2852,6 @@
             id: newReq.id, sku: newReq.sku, product_name: newReq.productName,
             origin: newReq.origin, qty: newReq.qty, requester: newReq.requester,
             dept: newReq.dept, note: newReq.note, status: 'pending',
-            reject_reason: '',
             created_at: new Date().toISOString()
           }).catch(err => console.warn(err));
         }
@@ -2936,9 +2890,7 @@
       setElementText('doc-req-sku', reqData.sku);
       setElementText('doc-req-item', reqData.productName);
       setElementText('doc-req-qty', `${reqData.qty} Pcs`);
-      setElementText('doc-req-note', reqData.status === 'rejected'
-        ? `${reqData.note}${reqData.rejectReason ? ' | Alasan Penolakan: ' + reqData.rejectReason : ''}`
-        : reqData.note);
+      setElementText('doc-req-note', reqData.note);
       setElementText('doc-sign-pemohon', `( ${reqData.requester} )`);
 
       openModal('modal-print-request');
@@ -2959,161 +2911,41 @@
     // being briefly rendered as PENDING if a realtime snapshot arrives out of order.
     const approvalStatusOverrides = new Map();
 
-    function escapeHtml(value = '') {
-      return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-    }
-
-    function openRejectReasonModal(reqId) {
-      if (currentRole !== 'admin') return;
-      const req = requests.find(r => String(r.id) === String(reqId));
-      if (!req) return;
-
-      const input = document.getElementById('reject-reason-input');
-      const btn = document.getElementById('btn-save-reject-reason');
-      const title = document.getElementById('reject-reason-title');
-      const subtitle = document.getElementById('reject-reason-subtitle');
-
-      window.currentRejectRequestId = String(reqId);
-
-      if (title) {
-        title.innerText = String(req.status || '').toLowerCase() === 'rejected'
-          ? 'Ubah Keterangan Penolakan'
-          : 'Alasan Penolakan Pengajuan';
-      }
-      if (subtitle) {
-        subtitle.innerText = String(req.status || '').toLowerCase() === 'rejected'
-          ? `Perbarui keterangan untuk pengajuan "${req.productName || '-'}".`
-          : `Masukkan alasan agar pemohon mengetahui penyebab pengajuan "${req.productName || '-'}" ditolak.`;
-      }
-      if (input) {
-        input.value = req.rejectReason || '';
-        input.classList.remove('input-error');
-      }
-      if (btn) {
-        btn.innerHTML = String(req.status || '').toLowerCase() === 'rejected'
-          ? '<i class="fa-solid fa-pen-to-square mr-2"></i> Simpan Keterangan'
-          : '<i class="fa-solid fa-ban mr-2"></i> Simpan Penolakan';
-        btn.disabled = false;
-      }
-      setFieldError('reject-reason-input', 'err-reject-reason', false);
-      openModal('modal-reject-reason');
-      setTimeout(() => input && input.focus(), 50);
-    }
-
-    async function saveRejectReason() {
-      if (currentRole !== 'admin') return;
-
-      const reqId = window.currentRejectRequestId;
-      const req = requests.find(r => String(r.id) === String(reqId));
-      const input = document.getElementById('reject-reason-input');
-      const btn = document.getElementById('btn-save-reject-reason');
-      if (!req || !input) return;
-
-      const reason = input.value.trim();
-      if (!reason || reason.length < 3) {
-        setFieldError('reject-reason-input', 'err-reject-reason', true);
-        return;
-      }
-
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Menyimpan...';
-      }
-
-      const previousStatus = String(req.status || '').toLowerCase();
-      const wasRejected = previousStatus === 'rejected';
-
-      try {
-        if (isCloudConnected) {
-          await db.collection('requests').doc(String(reqId)).update({
-            status: 'rejected',
-            reject_reason: reason
-          });
-        }
-
-        req.status = 'rejected';
-        req.rejectReason = reason;
-        approvalStatusOverrides.set(String(reqId), 'rejected');
-
-        saveStateLocally();
-        closeModal('modal-reject-reason');
-        refreshCurrentView();
-
-        showToast(
-          wasRejected
-            ? 'Keterangan penolakan berhasil diperbarui!'
-            : 'Pengajuan ditolak dan keterangan berhasil disimpan!',
-          'error'
-        );
-      } catch (error) {
-        console.error('Gagal menyimpan alasan penolakan:', error);
-        showToast('Gagal menyimpan keterangan penolakan.', 'error');
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = wasRejected
-            ? '<i class="fa-solid fa-pen-to-square mr-2"></i> Simpan Keterangan'
-            : '<i class="fa-solid fa-ban mr-2"></i> Simpan Penolakan';
-        }
-      }
-    }
-
     function renderApprovalTable() {
       if (requests.length === 0) {
-        setElementHTML('approval-tbody', `<tr><td colspan="8" class="p-6 text-center text-slate-500 font-medium">Belum ada pengajuan barang.</td></tr>`);
+        setElementHTML('approval-tbody', `<tr><td colspan="7" class="p-6 text-center text-slate-500 font-medium">Belum ada pengajuan barang.</td></tr>`);
         return;
       }
 
       const rows = requests.map(r => {
         const badgeClass = getRequestBadgeClass(r.status);
-
+        
+        // Gunakan status override sesi bila status Firestore/lokal sempat datang terlambat.
         const overrideStatus = approvalStatusOverrides.get(String(r.id));
         const currentStatus = String(overrideStatus || r.status || '').toLowerCase();
         if (overrideStatus) r.status = overrideStatus;
-
-        let actionButtons = '';
-        if (currentStatus === 'pending') {
-          actionButtons = `
-            <div class="flex items-center justify-center gap-1.5">
-              <button onclick="approveRequest('${r.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded-lg font-bold text-[10px] transition shadow-sm">Setujui</button>
-              <button onclick="rejectRequest('${r.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-2 py-1 rounded-lg font-bold text-[10px] transition shadow-sm">Tolak</button>
-              <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs transition border border-slate-700"><i class="fa-solid fa-print"></i></button>
-            </div>`;
-        } else if (currentStatus === 'rejected') {
-          actionButtons = `
-            <div class="flex items-center justify-center gap-1.5">
-              <button onclick="openRejectReasonModal('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-amber-300 px-2 py-1 rounded-lg text-[10px] font-bold transition border border-slate-700 flex items-center gap-1">
-                <i class="fa-solid fa-pen-to-square"></i> Keterangan
-              </button>
-              <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold transition border border-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-print"></i> Cetak Form</button>
-            </div>`;
-        } else {
-          actionButtons = `
-            <div class="flex items-center justify-center">
-              <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold transition border border-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-print"></i> Cetak Form</button>
-            </div>`;
-        }
-
-        const rejectReason = escapeHtml(r.rejectReason || '-');
+        
+        let actionButtons = currentStatus === 'pending' ? `
+          <div class="flex items-center justify-center gap-1.5">
+            <button onclick="approveRequest('${r.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded-lg font-bold text-[10px] transition shadow-sm">Setujui</button>
+            <button onclick="rejectRequest('${r.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-2 py-1 rounded-lg font-bold text-[10px] transition shadow-sm">Tolak</button>
+            <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-lg text-xs transition border border-slate-700"><i class="fa-solid fa-print"></i></button>
+          </div>` : `
+          <div class="flex items-center justify-center">
+            <button onclick="printRequestById('${r.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-bold transition border border-slate-700 flex items-center gap-1.5"><i class="fa-solid fa-print"></i> Cetak Form</button>
+          </div>`;
 
         return `
         <tr class="hover:bg-slate-800/50 transition">
-          <td class="p-3 font-mono text-slate-400">${escapeHtml(r.date)}</td>
-          <td class="p-3 font-bold text-white">${escapeHtml(r.productName)}</td>
-          <td class="p-3 text-slate-300">${escapeHtml(r.requester)} (${escapeHtml(r.dept)})</td>
+          <td class="p-3 font-mono text-slate-400">${r.date}</td>
+          <td class="p-3 font-bold text-white">${r.productName}</td>
+          <td class="p-3 text-slate-300">${r.requester} (${r.dept})</td>
           <td class="p-3 text-center font-bold text-orange-400">${r.qty} Pcs</td>
-          <td class="p-3 text-slate-300">${escapeHtml(r.note)}</td>
-          <td class="p-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${badgeClass}">${escapeHtml(r.status)}</span></td>
-          <td class="p-3 text-slate-300 ${currentStatus === 'rejected' ? 'text-rose-200' : 'text-slate-600'}">${rejectReason}</td>
+          <td class="p-3 text-slate-300">${r.note}</td>
+          <td class="p-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${badgeClass}">${r.status}</span></td>
           <td class="p-3 text-center">${actionButtons}</td>
         </tr>`;
       }).join('');
-
       setElementHTML('approval-tbody', rows);
     }
 
@@ -3225,14 +3057,12 @@
             });
 
             transaction.update(requestRef, {
-              status: 'approved',
-              reject_reason: ''
+              status: 'approved'
             });
           });
 
           // Apply local state only after Firestore confirms the transaction.
           req.status = 'approved';
-          req.rejectReason = '';
           target.stock = Number(committedStock);
           mutations.unshift({
             id: mutationId,
@@ -3307,18 +3137,32 @@
       }
     }
 
-    function rejectRequest(reqId) {
+    async function rejectRequest(reqId) {
       if (currentRole !== 'admin') return;
-      const req = requests.find(r => String(r.id) === String(reqId));
+      
+      const req = requests.find(r => r.id === reqId);
       if (!req) return;
 
       const statusCheck = (req.status || '').toLowerCase();
-      if (statusCheck !== 'pending') {
-        openRejectReasonModal(reqId);
-        return;
-      }
+      if (statusCheck !== 'pending') return;
 
-      openRejectReasonModal(reqId);
+      try {
+        // 1. OPTIMISTIC UPDATE
+        req.status = 'rejected';
+        approvalStatusOverrides.set(String(reqId), 'rejected');
+        saveStateLocally();
+        refreshCurrentView();
+        showToast('Permintaan ditolak!', 'error');
+
+        // 2. BACKGROUND SYNC
+        if (isCloudConnected) {
+          db.collection('requests').doc(String(reqId)).update({
+              status: 'rejected'
+          }).catch(err => console.warn(err));
+        }
+      } catch (error) {
+         console.error("Gagal menolak request:", error);
+      }
     }
 
     async function handleStockAdjustmentSubmit(e) {
@@ -3857,13 +3701,103 @@
       });
       const activeBtn = document.getElementById(`btn-report-${type}`);
       if (activeBtn) activeBtn.className = "btn-report-filter px-3 py-1.5 rounded-xl text-xs font-bold transition bg-orange-400 text-slate-950";
-      setElementText('report-filter-label', type.toUpperCase());
+      const labelMap = { all: 'SEMUA', lokal: 'LOKAL', import: 'IMPORT' };
+      setElementText('report-filter-label', labelMap[type] || String(type).toUpperCase());
       renderReportTable();
+    }
+
+    function normalizeReportDateInput(value) {
+      return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value) : '';
+    }
+
+    function mutationDateKey(dateValue) {
+      if (!dateValue) return '';
+      const str = String(dateValue).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+      const parsed = new Date(str);
+      if (Number.isNaN(parsed.getTime())) return '';
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const d = String(parsed.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function getReportDateRangeLabel() {
+      if (!reportStartDate && !reportEndDate) return 'SEMUA DATA';
+      const format = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('id-ID') : '';
+      if (reportStartDate && reportEndDate) return `${format(reportStartDate)} - ${format(reportEndDate)}`;
+      if (reportStartDate) return `Mulai ${format(reportStartDate)}`;
+      return `Sampai ${format(reportEndDate)}`;
+    }
+
+    function productHasMutationInReportRange(sku) {
+      if (!reportStartDate && !reportEndDate) return true;
+      return mutations.some(m => {
+        if (m.sku !== sku) return false;
+        const key = mutationDateKey(m.date || m.created_at);
+        if (!key) return false;
+        if (reportStartDate && key < reportStartDate) return false;
+        if (reportEndDate && key > reportEndDate) return false;
+        return true;
+      });
+    }
+
+    function validateReportDateRange(startValue, endValue) {
+      const start = normalizeReportDateInput(startValue);
+      const end = normalizeReportDateInput(endValue);
+      if (start && end && start > end) {
+        showToast('Tanggal mulai tidak boleh lebih besar dari tanggal akhir.', 'error');
+        return false;
+      }
+      return true;
+    }
+
+    function handleReportDateFilterChange() {
+      const startEl = document.getElementById('report-start-date');
+      const endEl = document.getElementById('report-end-date');
+      const start = startEl ? normalizeReportDateInput(startEl.value) : '';
+      const end = endEl ? normalizeReportDateInput(endEl.value) : '';
+      if (!validateReportDateRange(start, end)) {
+        if (endEl) endEl.value = reportEndDate;
+        if (startEl) startEl.value = reportStartDate;
+        return;
+      }
+      reportStartDate = start;
+      reportEndDate = end;
+      renderReportTable();
+    }
+
+    function resetReportDateFilter() {
+      reportStartDate = '';
+      reportEndDate = '';
+      const startEl = document.getElementById('report-start-date');
+      const endEl = document.getElementById('report-end-date');
+      if (startEl) startEl.value = '';
+      if (endEl) endEl.value = '';
+      renderReportTable();
+    }
+
+    function getFilteredReportProducts() {
+      return products
+        .filter(p => reportFilter === 'all' ? true : p.origin === reportFilter)
+        .filter(p => productHasMutationInReportRange(p.sku))
+        .sort(compareProductsForCatalog);
+    }
+
+    function printStockReport() {
+      const filtered = getFilteredReportProducts();
+      if (filtered.length === 0) {
+        showToast('Tidak ada data barang yang memiliki mutasi pada periode yang dipilih.', 'error');
+        return;
+      }
+      renderReportTable();
+      setTimeout(() => window.print(), 50);
     }
 
     function renderReportTable() {
       setElementText('report-print-date', new Date().toLocaleDateString('id-ID'));
-      const filtered = products.filter(p => reportFilter === 'all' ? true : p.origin === reportFilter).sort(compareProductsForCatalog);
+      setElementText('report-period-label', getReportDateRangeLabel());
+      const filtered = getFilteredReportProducts();
 
       if (filtered.length === 0) {
         setElementHTML('report-tbody', `<tr><td colspan="7" class="py-6 text-center text-slate-500 font-medium">Belum ada data barang.</td></tr>`);
@@ -3892,7 +3826,7 @@
     }
 
     async function exportToExcel() {
-      const filtered = products.filter(p => reportFilter === 'all' ? true : p.origin === reportFilter);
+      const filtered = getFilteredReportProducts();
       if (filtered.length === 0) {
         showToast('Tidak ada data barang untuk diexport!', 'error');
         return;
@@ -3911,10 +3845,11 @@
         'Total Nilai Aset (Rp)': Number(p.stock || 0) * Number(p.price || 0),
         'Supplier Preferred': p.supplier || '-',
         'Fungsi Sparepart': p.fungsi || '-',
-        'URL Foto Produk': exportImageValue(p.image)
+        'URL Foto Produk': exportImageValue(p.image),
+        'Periode Laporan': getReportDateRangeLabel()
       }));
 
-      const dateStr = formatDateTimeLocal(new Date()).slice(0, 10);
+      const dateStr = new Date().toISOString().slice(0, 10);
       try {
         const hasXlsx = await ensureExportXlsxOrFallback();
         if (hasXlsx) {
@@ -3969,13 +3904,12 @@
           (r.sku || '').toLowerCase().includes(search) || 
           (r.requester || '').toLowerCase().includes(search) || 
           (r.dept || '').toLowerCase().includes(search) ||
-          (r.note || '').toLowerCase().includes(search) ||
-          (r.rejectReason || '').toLowerCase().includes(search);
+          (r.note || '').toLowerCase().includes(search);
         return matchesStatus && matchesSearch;
       });
 
       if (filtered.length === 0) {
-        setElementHTML('report-pengajuan-tbody', `<tr><td colspan="7" class="py-6 text-center text-slate-500 font-medium">Belum ada data pengajuan yang sesuai.</td></tr>`);
+        setElementHTML('report-pengajuan-tbody', `<tr><td colspan="6" class="py-6 text-center text-slate-500 font-medium">Belum ada data pengajuan yang sesuai.</td></tr>`);
         return;
       }
 
@@ -3989,7 +3923,6 @@
           <td class="py-2 px-3 text-center font-bold text-orange-400 print:text-black">${r.qty} Pcs</td>
           <td class="py-2 px-3 text-slate-300 print:text-black">${r.note}</td>
           <td class="py-2 px-3 text-center"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase print:text-black print:border-slate-400 ${badgeClass}">${r.status}</span></td>
-          <td class="py-2 px-3 text-slate-300 print:text-black">${r.status === 'rejected' ? escapeHtml(r.rejectReason || '-') : '-'}</td>
         </tr>`;
       }).join('');
       setElementHTML('report-pengajuan-tbody', rows);
@@ -4006,8 +3939,7 @@
           (r.sku || '').toLowerCase().includes(search) ||
           (r.requester || '').toLowerCase().includes(search) ||
           (r.dept || '').toLowerCase().includes(search) ||
-          (r.note || '').toLowerCase().includes(search) ||
-          (r.rejectReason || '').toLowerCase().includes(search);
+          (r.note || '').toLowerCase().includes(search);
         return matchesStatus && matchesSearch;
       });
 
@@ -4024,11 +3956,10 @@
         'Nama Barang': r.productName || '-',
         'Jumlah Qty': Number(r.qty || 0),
         'Keperluan': r.note || '-',
-        'Status': String(r.status || '').toUpperCase(),
-        'Alasan Penolakan': r.status === 'rejected' ? (r.rejectReason || '-') : '-'
+        'Status': String(r.status || '').toUpperCase()
       }));
 
-      const dateStr = formatDateTimeLocal(new Date()).slice(0, 10);
+      const dateStr = new Date().toISOString().slice(0, 10);
       try {
         const hasXlsx = await ensureExportXlsxOrFallback();
         if (hasXlsx) {
