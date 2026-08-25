@@ -1384,6 +1384,112 @@
       openModal('modal-confirm-delete');
     }
 
+    function warehouseCodeKey(code) {
+      return String(code || '').trim().toUpperCase();
+    }
+
+    function mergeWarehousesByCode(cloudWarehouses, localWarehouses) {
+      const merged = new Map();
+
+      // Prioritaskan data cloud. Bila ada beberapa dokumen dengan kode sama,
+      // pertahankan satu dokumen yang paling baru di-update.
+      (cloudWarehouses || []).forEach(w => {
+        if (!w) return;
+        const key = warehouseCodeKey(w.code);
+        if (!key) return;
+        const existing = merged.get(key);
+        if (!existing) {
+          merged.set(key, w);
+          return;
+        }
+        const existingTs = Date.parse(existing.updated_at || existing.created_at || '') || 0;
+        const currentTs = Date.parse(w.updated_at || w.created_at || '') || 0;
+        if (currentTs >= existingTs) merged.set(key, w);
+      });
+
+      // Data lokal yang belum ada di cloud tetap dibawa naik agar master lama
+      // (misalnya LOKAL/IMPORT) tidak hilang ketika collection cloud sudah berisi data lain.
+      (localWarehouses || []).forEach(w => {
+        if (!w) return;
+        const key = warehouseCodeKey(w.code);
+        if (!key || merged.has(key)) return;
+        merged.set(key, {
+          id: String(w.id || ('wh-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6))),
+          code: key,
+          name: String(w.name || '').trim(),
+          location: String(w.location || '').trim(),
+          pic: String(w.pic || '').trim(),
+          created_at: w.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      });
+
+      return Array.from(merged.values()).sort((a, b) =>
+        String(a.code).localeCompare(String(b.code), undefined, { numeric: true, sensitivity: 'base' })
+      );
+    }
+
+    async function reconcileWarehousesToCloud(cloudDocs, localWarehouses) {
+      const cloudData = (cloudDocs || []).map(doc => normalizeWarehouseData(doc.data())).filter(Boolean);
+      const merged = mergeWarehousesByCode(cloudData, localWarehouses);
+      const batch = db.batch();
+      let writeCount = 0;
+      const existingByCode = new Map();
+
+      // Tandai dokumen cloud per kode agar duplicate code bisa dibersihkan.
+      (cloudDocs || []).forEach(doc => {
+        const data = normalizeWarehouseData(doc.data());
+        if (!data) return;
+        const key = warehouseCodeKey(data.code);
+        if (!existingByCode.has(key)) existingByCode.set(key, []);
+        existingByCode.get(key).push({ doc, data });
+      });
+
+      // Upsert satu dokumen canonical per kode.
+      merged.forEach(w => {
+        const key = warehouseCodeKey(w.code);
+        const candidates = existingByCode.get(key) || [];
+        let canonical = candidates.find(item => String(item.data.id) === String(w.id));
+        if (!canonical) canonical = candidates[0];
+
+        const canonicalId = canonical ? String(canonical.doc.id) : String(w.id);
+        const canonicalRef = db.collection('warehouses').doc(canonicalId);
+        const payload = {
+          id: canonicalId,
+          code: key,
+          name: w.name,
+          location: w.location,
+          pic: w.pic,
+          created_at: w.created_at || new Date().toISOString(),
+          updated_at: w.updated_at || new Date().toISOString()
+        };
+        batch.set(canonicalRef, payload, { merge: true });
+        writeCount++;
+
+        // Hapus dokumen duplikat dengan kode yang sama.
+        candidates.forEach(item => {
+          if (String(item.doc.id) !== canonicalId) {
+            batch.delete(db.collection('warehouses').doc(String(item.doc.id)));
+            writeCount++;
+          }
+        });
+      });
+
+      if (writeCount > 0) await batch.commit();
+
+      // Ambil ulang hasil final setelah rekonsiliasi.
+      const finalSnap = await db.collection('warehouses').get();
+      return finalSnap.docs
+        .map(doc => normalizeWarehouseData(doc.data()))
+        .filter(Boolean)
+        .reduce((acc, w) => {
+          const key = warehouseCodeKey(w.code);
+          if (!acc.some(existing => warehouseCodeKey(existing.code) === key)) acc.push(w);
+          return acc;
+        }, [])
+        .sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true, sensitivity: 'base' }));
+    }
+
     async function loadAllDataFromCloud() {
       if (!isCloudConnected) {
         showToast('Firebase belum dikonfigurasi. Menggunakan Mode Offline!', 'error');
@@ -1403,33 +1509,11 @@
         if (btnSync) btnSync.classList.add('opacity-50', 'pointer-events-none');
         if (syncIcon) syncIcon.classList.add('fa-spin');
 
-        // MASTER GUDANG: Firestore adalah sumber data bersama untuk semua user.
-        // Jika collection warehouses belum ada/masih kosong tetapi browser ini
-        // mempunyai data gudang lokal, migrasikan data tersebut ke Firestore sekali.
-        let whSnap = await db.collection('warehouses').get();
-        if (whSnap.empty && warehouses.length > 0) {
-          const seedBatch = db.batch();
-          const now = new Date().toISOString();
-          warehouses.forEach(w => {
-            const whRef = db.collection('warehouses').doc(String(w.id));
-            seedBatch.set(whRef, {
-              id: String(w.id),
-              code: w.code,
-              name: w.name,
-              location: w.location,
-              pic: w.pic,
-              created_at: w.created_at || now,
-              updated_at: now
-            }, { merge: true });
-          });
-          await seedBatch.commit();
-          whSnap = await db.collection('warehouses').get();
-        }
-
-        warehouses = whSnap.docs
-          .map(doc => normalizeWarehouseData(doc.data()))
-          .filter(Boolean)
-          .sort((a, b) => String(a.code).localeCompare(String(b.code)));
+        // MASTER GUDANG: selalu rekonsiliasi cloud + local berdasarkan KODE GUDANG.
+        // Ini mencegah master lama hilang hanya karena Firestore sudah mempunyai
+        // satu gudang lain, dan juga membersihkan duplikat kode gudang.
+        const whSnap = await db.collection('warehouses').get();
+        warehouses = await reconcileWarehousesToCloud(whSnap.docs, warehouses);
 
         const prodSnap = await db.collection('products').get();
         products = prodSnap.docs.map(doc => normalizeProductData(doc.data())).sort(compareProductsForCatalog);
@@ -1472,14 +1556,23 @@
       let isInitWarehouses = true;
 
       db.collection('warehouses').orderBy('code').onSnapshot(snapshot => {
+        const incoming = snapshot.docs
+          .map(doc => normalizeWarehouseData(doc.data()))
+          .filter(Boolean);
+
+        // Initial snapshot juga dipakai untuk menyatukan data cloud dengan cache lokal.
+        // Jangan biarkan snapshot awal menghapus master gudang lama yang masih ada di browser.
         if (isInitWarehouses) {
           isInitWarehouses = false;
+          const before = warehouses.slice();
+          warehouses = mergeWarehousesByCode(incoming, before);
+          saveStateLocally();
+          refreshCurrentView();
           return;
         }
-        warehouses = snapshot.docs
-          .map(doc => normalizeWarehouseData(doc.data()))
-          .filter(Boolean)
-          .sort((a, b) => String(a.code).localeCompare(String(b.code)));
+
+        // Listener realtime hanya menampilkan satu kartu per KODE gudang.
+        warehouses = mergeWarehousesByCode(incoming, []);
         saveStateLocally();
         refreshCurrentView();
       }, error => {
@@ -3592,7 +3685,7 @@
       const pic = picInput.value.trim();
 
       let isValid = true;
-      const duplicateLocal = warehouses.some(w => w.code === code);
+      const duplicateLocal = warehouses.some(w => warehouseCodeKey(w.code) === code);
       if (!code || code.length < 3 || duplicateLocal) {
         setFieldError('add-wh-code', 'err-wh-code', true, duplicateLocal ? `Kode "${code}" sudah digunakan!` : 'Kode gudang min 3 karakter.');
         isValid = false;
@@ -3629,10 +3722,15 @@
         }
 
         if (isCloudConnected) {
+          const duplicateSnap = await db.collection('warehouses').where('code', '==', code).get();
+          if (!duplicateSnap.empty) {
+            showToast(`Kode gudang "${code}" sudah ada di database!`, 'error');
+            return;
+          }
           await db.collection('warehouses').doc(String(newWh.id)).set(newWh, { merge: true });
         }
 
-        warehouses.push(newWh);
+        warehouses = mergeWarehousesByCode(warehouses, [newWh]);
         warehouses.sort((a, b) => String(a.code).localeCompare(String(b.code)));
         saveStateLocally();
         closeModal('modal-add-warehouse');
