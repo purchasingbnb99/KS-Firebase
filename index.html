@@ -74,6 +74,11 @@
       @page { size: A4 portrait; margin: 15mm; }
     }
 
+    #mobile-menu-btn {
+      display: none;
+    }
+    body.mobile-nav-open { overflow: hidden !important; }
+
     /* ============================================================
        ROBUST MOBILE MODE
        Keeps mobile layout active on Android/iOS even when the
@@ -99,6 +104,10 @@
       #app > main { width: 100% !important; min-width: 0 !important; }
       #mobile-menu-btn { display: inline-flex !important; }
       #app > main > header { min-height: 64px !important; padding: 10px 12px !important; gap: 8px !important; }
+      #app > main > header > div:first-child { flex: 1 1 auto !important; min-width: 0 !important; }
+      #app > main > header > div:first-child > div:last-child { min-width: 0 !important; flex: 1 1 auto !important; }
+      #app > main > header > #btn-sync-cloud { width: 42px !important; min-width: 42px !important; height: 42px !important; padding: 0 !important; font-size: 0 !important; flex: 0 0 42px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+      #app > main > header > #btn-sync-cloud i { margin: 0 !important; font-size: 15px !important; }
       #page-title { font-size: 15px !important; line-height: 1.2 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
       #app > main > header p { font-size: 9px !important; line-height: 1.25 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
       #main-content { padding: 12px !important; overflow-y: auto !important; overflow-x: hidden !important; }
@@ -129,6 +138,8 @@
     }
     body.mobile-device #app.mobile-sidebar-open > aside { transform: translateX(0) !important; }
     body.mobile-device #app > main { width: 100% !important; min-width: 0 !important; }
+    body.mobile-device #app > main > header > #btn-sync-cloud { width: 42px !important; min-width: 42px !important; height: 42px !important; padding: 0 !important; font-size: 0 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+    body.mobile-device #app > main > header > #btn-sync-cloud i { margin: 0 !important; font-size: 15px !important; }
     body.mobile-device #mobile-menu-btn { display: inline-flex !important; }
     body.mobile-device #mobile-sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(2,6,23,.62); backdrop-filter: blur(2px); z-index: 60; }
     body.mobile-device #app.mobile-sidebar-open + #mobile-sidebar-overlay { display: block !important; }
@@ -265,11 +276,16 @@
 
     <main class="flex-1 flex flex-col h-screen overflow-hidden bg-[#0B1120]">
       <header class="bg-slate-900 border-b border-slate-800/80 px-6 py-4 flex items-center justify-between print:hidden shadow-sm shrink-0">
-        <div>
-          <h2 id="page-title" class="text-lg font-bold text-white capitalize flex items-center gap-2">
-            <i class="fa-solid fa-chart-pie text-orange-400"></i> Dashboard Operasional Stok
-          </h2>
-          <p class="text-xs text-slate-400">System Stok Digital - Pengelolaan Inventory Multigudang & Real-Time</p>
+        <div class="flex items-center gap-2 min-w-0">
+          <button id="mobile-menu-btn" type="button" aria-label="Buka menu navigasi" aria-expanded="false" onclick="toggleMobileSidebar()">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <div class="min-w-0">
+            <h2 id="page-title" class="text-lg font-bold text-white capitalize flex items-center gap-2">
+              <i class="fa-solid fa-chart-pie text-orange-400"></i> Dashboard Operasional Stok
+            </h2>
+            <p class="text-xs text-slate-400">System Stok Digital - Pengelolaan Inventory Multigudang & Real-Time</p>
+          </div>
         </div>
         <button onclick="loadAllDataFromCloud()" id="btn-sync-cloud" class="bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 px-3 py-1.5 rounded-xl border border-slate-700 transition flex items-center gap-1.5">
           <i class="fa-solid fa-rotate"></i> Sync Data Cloud
@@ -1828,6 +1844,7 @@
     }
 
     function requestAdminAccess() {
+      closeMobileSidebar();
       if (isAdminAuthenticated) {
         setRole('admin');
       } else {
@@ -4336,6 +4353,39 @@
       setTimeout(() => container.classList.add('hidden'), 3500);
     }
 
+    function openMobileSidebar() {
+      const app = document.getElementById('app');
+      const btn = document.getElementById('mobile-menu-btn');
+      if (!app) return;
+      app.classList.add('mobile-sidebar-open');
+      document.body.classList.add('mobile-nav-open');
+      if (btn) {
+        btn.setAttribute('aria-expanded', 'true');
+        btn.setAttribute('aria-label', 'Tutup menu navigasi');
+        btn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      }
+    }
+
+    function closeMobileSidebar() {
+      const app = document.getElementById('app');
+      const btn = document.getElementById('mobile-menu-btn');
+      if (!app) return;
+      app.classList.remove('mobile-sidebar-open');
+      document.body.classList.remove('mobile-nav-open');
+      if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-label', 'Buka menu navigasi');
+        btn.innerHTML = '<i class="fa-solid fa-bars"></i>';
+      }
+    }
+
+    function toggleMobileSidebar() {
+      const app = document.getElementById('app');
+      if (!app) return;
+      if (app.classList.contains('mobile-sidebar-open')) closeMobileSidebar();
+      else openMobileSidebar();
+    }
+
     function applyMobileDeviceMode() {
       const ua = String(navigator.userAgent || '');
       const isTouch = Number(navigator.maxTouchPoints || 0) > 0;
@@ -4356,5 +4406,6 @@
 
     window.addEventListener('resize', applyMobileDeviceMode);
   </script>
+  <div id="mobile-sidebar-overlay" aria-hidden="true" onclick="closeMobileSidebar()"></div>
 </body>
 </html>
