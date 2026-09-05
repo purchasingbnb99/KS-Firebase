@@ -73,6 +73,77 @@
 
       @page { size: A4 portrait; margin: 15mm; }
     }
+
+    /* ============================================================
+       ROBUST MOBILE MODE
+       Keeps mobile layout active on Android/iOS even when the
+       browser uses Desktop Site / a wider reported viewport.
+       Desktop styling remains unchanged.
+       ============================================================ */
+    @media screen and (max-width: 767px), (hover: none) and (pointer: coarse) {
+      body { overflow: hidden !important; }
+      #app { width: 100vw !important; min-width: 0 !important; }
+      #app > aside {
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        width: min(82vw, 300px) !important;
+        max-width: 300px !important;
+        height: 100dvh !important;
+        transform: translateX(-105%) !important;
+        transition: transform 220ms ease !important;
+        z-index: 70 !important;
+      }
+      #app.mobile-sidebar-open > aside { transform: translateX(0) !important; }
+      #app > main { width: 100% !important; min-width: 0 !important; }
+      #mobile-menu-btn { display: inline-flex !important; }
+      #app > main > header { min-height: 64px !important; padding: 10px 12px !important; gap: 8px !important; }
+      #page-title { font-size: 15px !important; line-height: 1.2 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+      #app > main > header p { font-size: 9px !important; line-height: 1.25 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+      #main-content { padding: 12px !important; overflow-y: auto !important; overflow-x: hidden !important; }
+      #mobile-sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(2,6,23,.62); backdrop-filter: blur(2px); z-index: 60; }
+      #app.mobile-sidebar-open + #mobile-sidebar-overlay { display: block !important; }
+      .tab-view { min-width: 0 !important; max-width: 100% !important; }
+      .overflow-x-auto { max-width: 100% !important; }
+      .overflow-x-auto > table { min-width: 720px; }
+      .grid.grid-cols-2, .grid.grid-cols-3 { grid-template-columns: minmax(0, 1fr) !important; }
+      .grid.md\\:grid-cols-2, .grid.md\\:grid-cols-3 { grid-template-columns: minmax(0, 1fr) !important; }
+      .flex.flex-wrap { row-gap: 8px !important; }
+      .modal-content, [id^="modal-"] > div { max-width: calc(100vw - 24px) !important; }
+      input, select, textarea, button { font-size: 14px !important; }
+      button { min-height: 42px; }
+    }
+
+    body.mobile-device #app > aside {
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      bottom: 0 !important;
+      width: min(82vw, 300px) !important;
+      max-width: 300px !important;
+      height: 100dvh !important;
+      transform: translateX(-105%) !important;
+      z-index: 70 !important;
+      transition: transform 220ms ease !important;
+    }
+    body.mobile-device #app.mobile-sidebar-open > aside { transform: translateX(0) !important; }
+    body.mobile-device #app > main { width: 100% !important; min-width: 0 !important; }
+    body.mobile-device #mobile-menu-btn { display: inline-flex !important; }
+    body.mobile-device #mobile-sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(2,6,23,.62); backdrop-filter: blur(2px); z-index: 60; }
+    body.mobile-device #app.mobile-sidebar-open + #mobile-sidebar-overlay { display: block !important; }
+    body.mobile-device #main-content { padding: 12px !important; overflow-y: auto !important; overflow-x: hidden !important; }
+    body.mobile-device .tab-view { min-width: 0 !important; max-width: 100% !important; }
+    body.mobile-device .overflow-x-auto { max-width: 100% !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+    body.mobile-device .overflow-x-auto > table { min-width: 720px; }
+    body.mobile-device .grid.grid-cols-2,
+    body.mobile-device .grid.grid-cols-3,
+    body.mobile-device .grid.md\\:grid-cols-2,
+    body.mobile-device .grid.md\\:grid-cols-3 { grid-template-columns: minmax(0, 1fr) !important; }
+    body.mobile-device .modal-content, body.mobile-device [id^="modal-"] > div { max-width: calc(100vw - 24px) !important; }
+    body.mobile-device input, body.mobile-device select, body.mobile-device textarea, body.mobile-device button { font-size: 14px !important; }
+    body.mobile-device button { min-height: 42px; }
+
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 antialiased min-h-screen flex flex-col font-sans">
@@ -1817,6 +1888,7 @@
     }
 
     function switchTab(tabId) {
+      closeMobileSidebar();
       const adminTabs = ['inbound', 'approval', 'adjustment', 'transfer'];
       if (adminTabs.includes(tabId) && currentRole !== 'admin') {
         showToast('Akses Ditolak: Fitur ini khusus Admin!', 'error');
@@ -4264,12 +4336,25 @@
       setTimeout(() => container.classList.add('hidden'), 3500);
     }
 
+    function applyMobileDeviceMode() {
+      const ua = String(navigator.userAgent || '');
+      const isTouch = Number(navigator.maxTouchPoints || 0) > 0;
+      const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+      const isSmallViewport = window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
+      const isMobileDevice = isMobileUA || (isTouch && isSmallViewport);
+      document.body.classList.toggle('mobile-device', isMobileDevice);
+      return isMobileDevice;
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
+      applyMobileDeviceMode();
       setRole('user');
       switchTab('dashboard');
       loadAllDataFromCloud();
       setupRealtimeSync();
     });
+
+    window.addEventListener('resize', applyMobileDeviceMode);
   </script>
 </body>
 </html>
