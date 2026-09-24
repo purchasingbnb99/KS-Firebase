@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-09-24-barcode-scan-v2" />
+  <meta name="app-build" content="2026-09-24-sku-sort-mobile-modal-v1" />
   <title>System Stok Digital - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23fb923c'/><text x='50%' y='68%' font-size='65' font-weight='900' font-family='sans-serif' fill='white' text-anchor='middle'>A</text></svg>">
@@ -158,6 +158,25 @@
     body.mobile-device button { min-height: 42px; }
     body.mobile-device #modal-barcode-scanner > div { width: min(100%, 520px); max-height: calc(100dvh - 24px); }
     body.mobile-device #barcode-reader { min-height: 230px !important; }
+
+    /* Modal Tambah/Edit Barang: scroll internal khusus perangkat mobile. */
+    body.mobile-device #modal-add-product,
+    body.mobile-device #modal-edit-product {
+      align-items: center !important;
+      justify-content: center !important;
+      overflow: hidden !important;
+    }
+    body.mobile-device #modal-add-product > .modal-product-panel,
+    body.mobile-device #modal-edit-product > .modal-product-panel {
+      width: min(100%, 520px) !important;
+      max-height: calc(100dvh - 32px) !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
+      scrollbar-width: thin;
+    }
 
   </style>
 </head>
@@ -1018,7 +1037,7 @@
 
     <!-- Modal Tambah Produk dengan Validasi -->
     <div id="modal-add-product" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-800">
+      <div class="modal-product-panel bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-800">
         <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
           <h3 class="font-bold text-white text-base">Tambah Barang Baru</h3>
           <button onclick="closeModal('modal-add-product')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -1129,7 +1148,7 @@
 
     <!-- Modal Edit Produk dengan Validasi -->
     <div id="modal-edit-product" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-800">
+      <div class="modal-product-panel bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-800">
         <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
           <h3 class="font-bold text-white text-base">Edit Data Barang</h3>
           <button onclick="closeModal('modal-edit-product')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
@@ -2225,14 +2244,20 @@
     }
 
     function compareProductsForCatalog(a, b) {
-      const ao = Number(a.catalogOrder);
-      const bo = Number(b.catalogOrder);
-      const aHas = Number.isFinite(ao);
-      const bHas = Number.isFinite(bo);
-      if (aHas && bHas && ao !== bo) return ao - bo;
-      if (aHas && !bHas) return -1;
-      if (!aHas && bHas) return 1;
-      return String(a.sku || '').localeCompare(String(b.sku || ''), undefined, { numeric: true, sensitivity: 'base' });
+      // Urutan katalog selalu mengikuti SKU terbaru (natural/numeric sorting).
+      // catalogOrder tetap dipertahankan hanya untuk kompatibilitas data lama,
+      // tetapi tidak lagi menjadi penentu utama posisi barang.
+      const skuA = String(a?.sku || '').trim();
+      const skuB = String(b?.sku || '').trim();
+      const skuCompare = skuA.localeCompare(skuB, undefined, { numeric: true, sensitivity: 'base' });
+      if (skuCompare !== 0) return skuCompare;
+
+      // Pengaman tambahan bila terjadi SKU yang sama di data lama.
+      const ao = Number(a?.catalogOrder);
+      const bo = Number(b?.catalogOrder);
+      if (Number.isFinite(ao) && Number.isFinite(bo) && ao !== bo) return ao - bo;
+
+      return String(a?.name || '').localeCompare(String(b?.name || ''), undefined, { sensitivity: 'base' });
     }
 
     function renderCatalogTable() {
