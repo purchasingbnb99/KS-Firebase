@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-09-24-barcode-scan-v1" />
+  <meta name="app-build" content="2026-09-24-barcode-scan-v2" />
   <title>System Stok Digital - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23fb923c'/><text x='50%' y='68%' font-size='65' font-weight='900' font-family='sans-serif' fill='white' text-anchor='middle'>A</text></svg>">
@@ -1064,6 +1064,12 @@
           </div>
 
           <div>
+            <label class="text-xs font-bold text-slate-300 block mb-1">Barcode *</label>
+            <input type="text" id="add-prod-barcode" required placeholder="Scan / Kode Barcode" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono uppercase" />
+            <span class="error-text hidden" id="err-add-barcode">Barcode wajib diisi dan harus unik.</span>
+          </div>
+
+          <div>
             <label class="text-xs font-bold text-slate-300 block mb-1">Nama Barang *</label>
             <input type="text" id="add-prod-name" required placeholder="Nama lengkap item..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
             <span class="error-text hidden" id="err-add-name">Nama barang minimal 3 karakter.</span>
@@ -1149,7 +1155,8 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Kode SKU *</label>
-              <input type="text" id="edit-prod-sku" required readonly class="w-full px-3 py-2 text-xs bg-slate-950 text-slate-400 border border-slate-800 rounded-xl focus:outline-none cursor-not-allowed font-mono font-bold" />
+              <input type="text" id="edit-prod-sku" required placeholder="BRG-001" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono font-bold uppercase" />
+              <span class="error-text hidden" id="err-edit-sku">SKU minimal 3 karakter dan harus unik.</span>
             </div>
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Klasifikasi Asal *</label>
@@ -1167,6 +1174,12 @@
                 <i class="fa-solid fa-chevron-down absolute right-3 top-3 text-slate-500 text-[10px] pointer-events-none"></i>
               </div>
             </div>
+          </div>
+
+          <div>
+            <label class="text-xs font-bold text-slate-300 block mb-1">Barcode *</label>
+            <input type="text" id="edit-prod-barcode" required placeholder="Kode Barcode" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono uppercase" />
+            <span class="error-text hidden" id="err-edit-barcode">Barcode wajib diisi dan harus unik.</span>
           </div>
 
           <div>
@@ -1456,6 +1469,7 @@
     let barcodeScannerInstance = null;
     let barcodeScannerTarget = null;
     let barcodeScannerBusy = false;
+    let pendingBarcodeAddContext = null;
     window.isPrintAfterSubmit = false;
 
     function setFieldError(fieldId, errorId, show, customMsg = '') {
@@ -1743,14 +1757,26 @@
     }
 
     function normalizeProductData(p) {
+      const sku = String(p?.sku || '').trim().toUpperCase();
+      const aliasesRaw = Array.isArray(p?.sku_aliases) ? p.sku_aliases : (Array.isArray(p?.skuAliases) ? p.skuAliases : []);
+      const skuAliases = aliasesRaw
+        .map(v => String(v || '').trim().toUpperCase())
+        .filter(Boolean)
+        .filter((v, i, arr) => arr.indexOf(v) === i && v !== sku);
+
       return {
-        id: p.id, sku: p.sku, name: p.name, origin: p.origin || 'lokal',
-        category: p.category || 'General', stock: p.stock || 0,
-        minStock: p.min_stock || 5, price: p.price || 0,
-        warehouse: p.warehouse || 'Gudang Utama A', shelf: p.shelf || 'A-01',
-        supplier: p.supplier || '-', image: p.image || '',
-        fungsi: p.fungsi || '-',
-        catalogOrder: Number.isFinite(Number(p.catalog_order)) ? Number(p.catalog_order) : null
+        id: p?.id,
+        sku,
+        barcode: String(p?.barcode || sku).trim().toUpperCase(),
+        skuAliases,
+        name: p?.name || '',
+        origin: p?.origin || 'lokal',
+        category: p?.category || 'General', stock: Number(p?.stock || 0),
+        minStock: Number(p?.min_stock || 5), price: Number(p?.price || 0),
+        warehouse: p?.warehouse || 'Gudang Utama A', shelf: p?.shelf || 'A-01',
+        supplier: p?.supplier || '-', image: p?.image || '',
+        fungsi: p?.fungsi || '-',
+        catalogOrder: Number.isFinite(Number(p?.catalog_order)) ? Number(p.catalog_order) : null
       };
     }
 
@@ -2223,7 +2249,9 @@
 
       const filtered = products.filter(p => {
         const matchesOrigin = currentTab === 'lokal' ? p.origin === 'lokal' : p.origin === 'import';
-        const matchesSearch = String(p.name || '').toLowerCase().includes(search) || String(p.sku || '').toLowerCase().includes(search) || String(p.warehouse || '').toLowerCase().includes(search);
+        const lookupText = [p.name, p.sku, p.barcode, p.warehouse, ...(p.skuAliases || [])]
+          .map(v => String(v || '').toLowerCase()).join(' ');
+        const matchesSearch = lookupText.includes(search);
         const matchesCategory = catFilter === 'all' || p.category === catFilter;
         return matchesOrigin && matchesSearch && matchesCategory;
       }).sort(compareProductsForCatalog);
@@ -2400,6 +2428,8 @@
 
         const data = filtered.map(p => ({
           'Kode SKU': p.sku || '-',
+          'Barcode': p.barcode || p.sku || '-',
+          'SKU Lama / Alias': (p.skuAliases || []).join(', ') || '-',
           'Nama Barang': p.name || '-',
           'Klasifikasi Asal': String(p.origin || activeCategory).toUpperCase(),
           'Kategori': p.category || '-',
@@ -2511,6 +2541,12 @@
       const name = String(getImportField(row, ['Nama Barang', 'Nama', 'Nama Produk'], '')).trim();
       if (!sku || !name) return null;
 
+      const barcodeRaw = String(getImportField(row, ['Barcode', 'Kode Barcode', 'Barcode Produk'], sku) || sku).trim().toUpperCase();
+      const aliasRaw = String(getImportField(row, ['SKU Lama / Alias', 'SKU Lama', 'Alias SKU', 'SKU Alias'], '') || '').trim();
+      const skuAliases = aliasRaw
+        ? aliasRaw.split(/[,;|]/).map(v => v.trim().toUpperCase()).filter(v => v && v !== sku)
+        : [];
+
       const originRaw = String(getImportField(row, ['Klasifikasi Asal', 'Asal', 'Origin'], defaultOrigin)).toLowerCase();
       const origin = originRaw.includes('import') ? 'import' : 'lokal';
 
@@ -2527,6 +2563,8 @@
       return {
         id: 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
         sku,
+        barcode: barcodeRaw || sku,
+        skuAliases,
         name,
         origin,
         category,
@@ -2647,6 +2685,8 @@
               batch.set(ref, {
                 id: product.id,
                 sku: product.sku,
+                barcode: product.barcode || product.sku,
+                sku_aliases: product.skuAliases || [],
                 name: product.name,
                 origin: product.origin,
                 category: product.category,
@@ -2717,6 +2757,8 @@
 
       document.getElementById('edit-prod-id').value = targetProd.id;
       document.getElementById('edit-prod-sku').value = targetProd.sku;
+      document.getElementById('edit-prod-sku').dataset.originalSku = targetProd.sku;
+      document.getElementById('edit-prod-barcode').value = targetProd.barcode || targetProd.sku;
       
       const editOrigin = document.getElementById('edit-prod-origin');
       if (editOrigin) {
@@ -2745,15 +2787,30 @@
       clearAllFormErrors();
 
       const id = document.getElementById('edit-prod-id').value;
-      const targetProd = products.find(p => p.id === id || p.sku === document.getElementById('edit-prod-sku').value);
-
+      const originalSku = String(document.getElementById('edit-prod-sku').dataset.originalSku || '').trim().toUpperCase();
+      const targetProd = products.find(p => String(p.id) === String(id));
       if (!targetProd) return;
 
+      const newSku = String(document.getElementById('edit-prod-sku').value || '').trim().toUpperCase();
+      const newBarcode = String(document.getElementById('edit-prod-barcode').value || newSku).trim().toUpperCase();
       const nameVal = document.getElementById('edit-prod-name').value.trim();
       const catVal = document.getElementById('edit-prod-category').value.trim();
-      const minStockVal = parseInt(document.getElementById('edit-prod-min-stock').value);
+      const minStockVal = parseInt(document.getElementById('edit-prod-min-stock').value, 10);
 
       let isValid = true;
+      const duplicateSku = products.some(p => p !== targetProd && (
+        String(p.sku || '').trim().toUpperCase() === newSku || (p.skuAliases || []).includes(newSku)
+      ));
+      const duplicateBarcode = products.some(p => p !== targetProd && String(p.barcode || p.sku || '').trim().toUpperCase() === newBarcode);
+
+      if (!newSku || newSku.length < 3 || duplicateSku) {
+        setFieldError('edit-prod-sku', 'err-edit-sku', true, duplicateSku ? `SKU "${newSku}" sudah digunakan oleh barang lain.` : 'SKU minimal 3 karakter.');
+        isValid = false;
+      }
+      if (!newBarcode || duplicateBarcode) {
+        setFieldError('edit-prod-barcode', 'err-edit-barcode', true, duplicateBarcode ? `Barcode "${newBarcode}" sudah digunakan oleh barang lain.` : 'Barcode wajib diisi.');
+        isValid = false;
+      }
       if (nameVal.length < 3) {
         setFieldError('edit-prod-name', 'err-edit-name', true);
         isValid = false;
@@ -2766,36 +2823,58 @@
         setFieldError('edit-prod-min-stock', 'err-edit-min-stock', true);
         isValid = false;
       }
-
       if (!isValid) return;
 
+      const oldSku = String(targetProd.sku || '').trim().toUpperCase();
+      const aliases = Array.isArray(targetProd.skuAliases) ? [...targetProd.skuAliases] : [];
+      if (oldSku && oldSku !== newSku && !aliases.includes(oldSku)) aliases.push(oldSku);
+
+      const previousState = { ...targetProd, skuAliases: [...aliases] };
+      targetProd.sku = newSku;
+      targetProd.barcode = newBarcode;
+      targetProd.skuAliases = aliases;
       targetProd.origin = document.getElementById('edit-prod-origin').value;
       targetProd.name = nameVal;
       targetProd.category = catVal;
       targetProd.warehouse = document.getElementById('edit-prod-warehouse').value;
       targetProd.shelf = document.getElementById('edit-prod-shelf').value.trim() || 'A-01';
       targetProd.minStock = minStockVal;
-      targetProd.price = parseInt(document.getElementById('edit-prod-price').value) || 0;
+      targetProd.price = parseInt(document.getElementById('edit-prod-price').value, 10) || 0;
       targetProd.supplier = document.getElementById('edit-prod-supplier').value.trim() || '-';
       targetProd.fungsi = document.getElementById('edit-prod-fungsi').value.trim() || '-';
 
       if (tempEditUploadedImageData) targetProd.image = tempEditUploadedImageData;
 
-      if (isCloudConnected) {
-        await db.collection('products').doc(targetProd.id).set({
-          id: targetProd.id, sku: targetProd.sku, origin: targetProd.origin,
-          name: targetProd.name, category: targetProd.category,
-          warehouse: targetProd.warehouse, shelf: targetProd.shelf,
-          min_stock: targetProd.minStock, price: targetProd.price,
-          supplier: targetProd.supplier, image: targetProd.image, stock: targetProd.stock,
-          fungsi: targetProd.fungsi
-        }, { merge: true });
-      }
+      try {
+        if (isCloudConnected) {
+          await db.collection('products').doc(String(targetProd.id)).set({
+            id: targetProd.id,
+            sku: targetProd.sku,
+            barcode: targetProd.barcode,
+            sku_aliases: targetProd.skuAliases,
+            origin: targetProd.origin,
+            name: targetProd.name,
+            category: targetProd.category,
+            warehouse: targetProd.warehouse,
+            shelf: targetProd.shelf,
+            min_stock: targetProd.minStock,
+            price: targetProd.price,
+            supplier: targetProd.supplier,
+            image: targetProd.image,
+            stock: targetProd.stock,
+            fungsi: targetProd.fungsi
+          }, { merge: true });
+        }
 
-      saveStateLocally();
-      closeModal('modal-edit-product');
-      refreshCurrentView();
-      showToast(`Data barang "${targetProd.name}" berhasil diperbarui!`);
+        saveStateLocally();
+        closeModal('modal-edit-product');
+        refreshCurrentView();
+        showToast(oldSku !== newSku ? `SKU berhasil diubah dari ${oldSku} menjadi ${newSku}. Barcode tetap ${newBarcode}.` : `Data barang "${targetProd.name}" berhasil diperbarui!`);
+      } catch (error) {
+        Object.assign(targetProd, previousState);
+        console.error('Gagal memperbarui produk:', error);
+        showToast('Gagal memperbarui data barang. Perubahan dibatalkan.', 'error');
+      }
     }
 
     function deleteProduct(sku) {
@@ -2818,21 +2897,37 @@
       );
     }
 
-    function openAddProductModal() {
+    function openAddProductModal(preset = {}) {
       if (currentRole !== 'admin') return;
       clearAllFormErrors();
       tempUploadedImageData = '';
+      const form = document.getElementById('form-add-product');
+      if (form) form.reset();
+
       const imgPreview = document.getElementById('add-prod-img-preview');
       if (imgPreview) imgPreview.src = "https://placehold.co/100x100/1e293b/94a3b8?text=Foto";
-      
+
       const addOrigin = document.getElementById('add-prod-origin');
       if (addOrigin) {
-        addOrigin.value = 'lokal';
+        addOrigin.value = preset.origin || 'lokal';
         updateOriginFlagIcon(addOrigin, 'add-flag-container');
       }
 
+      const presetSku = String(preset.sku || '').trim().toUpperCase();
+      const presetBarcode = String(preset.barcode || presetSku).trim().toUpperCase();
+      const skuEl = document.getElementById('add-prod-sku');
+      const barcodeEl = document.getElementById('add-prod-barcode');
+      if (skuEl) skuEl.value = presetSku;
+      if (barcodeEl) barcodeEl.value = presetBarcode;
+
       updateWarehouseDropdowns();
       openModal('modal-add-product');
+      if (presetSku) {
+        setTimeout(() => {
+          const nameEl = document.getElementById('add-prod-name');
+          if (nameEl) nameEl.focus();
+        }, 120);
+      }
     }
 
     async function handleAddProductSubmit(e) {
@@ -2841,19 +2936,26 @@
       clearAllFormErrors();
 
       const skuInput = document.getElementById('add-prod-sku');
+      const barcodeInput = document.getElementById('add-prod-barcode');
       const nameInput = document.getElementById('add-prod-name');
       const categoryInput = document.getElementById('add-prod-category');
       const priceInput = document.getElementById('add-prod-price');
-
-      const sku = skuInput.value.trim().toUpperCase();
-      const name = nameInput.value.trim();
-      const category = categoryInput.value.trim();
-      const price = parseInt(priceInput.value);
+      const sku = String(skuInput?.value || '').trim().toUpperCase();
+      const barcode = String(barcodeInput?.value || sku).trim().toUpperCase();
+      const name = String(nameInput?.value || '').trim();
+      const category = String(categoryInput?.value || '').trim();
+      const price = parseInt(priceInput?.value || '', 10);
 
       let isValid = true;
+      const duplicateSku = products.some(p => String(p.sku || '').trim().toUpperCase() === sku || (p.skuAliases || []).includes(sku));
+      const duplicateBarcode = products.some(p => String(p.barcode || p.sku || '').trim().toUpperCase() === barcode);
 
-      if (!sku || sku.length < 3 || products.some(p => p.sku === sku)) {
-        setFieldError('add-prod-sku', 'err-add-sku', true, products.some(p => p.sku === sku) ? `SKU "${sku}" sudah terdaftar!` : 'SKU min. 3 karakter.');
+      if (!sku || sku.length < 3 || duplicateSku) {
+        setFieldError('add-prod-sku', 'err-add-sku', true, duplicateSku ? `SKU "${sku}" sudah terdaftar atau menjadi alias SKU lain.` : 'SKU min. 3 karakter.');
+        isValid = false;
+      }
+      if (!barcode || duplicateBarcode) {
+        setFieldError('add-prod-barcode', 'err-add-barcode', true, duplicateBarcode ? `Barcode "${barcode}" sudah digunakan oleh barang lain.` : 'Barcode wajib diisi.');
         isValid = false;
       }
       if (!name || name.length < 3) {
@@ -2868,46 +2970,73 @@
         setFieldError('add-prod-price', 'err-add-price', true);
         isValid = false;
       }
-
       if (!isValid) return;
 
-      const initialStock = parseInt(document.getElementById('add-prod-stock').value) || 0;
+      const initialStock = parseInt(document.getElementById('add-prod-stock')?.value || '0', 10) || 0;
+      const origin = document.getElementById('add-prod-origin')?.value || 'lokal';
       const newProd = {
         id: 'p-' + Date.now(),
         sku,
-        origin: document.getElementById('add-prod-origin').value,
+        barcode,
+        skuAliases: [],
+        origin,
         name,
         category,
-        warehouse: document.getElementById('add-prod-warehouse').value || 'Gudang Utama A',
-        shelf: document.getElementById('add-prod-shelf').value || 'A-01',
+        warehouse: document.getElementById('add-prod-warehouse')?.value || 'Gudang Utama A',
+        shelf: document.getElementById('add-prod-shelf')?.value || 'A-01',
         stock: initialStock,
-        minStock: parseInt(document.getElementById('add-prod-min-stock').value) || 5,
+        minStock: parseInt(document.getElementById('add-prod-min-stock')?.value || '5', 10) || 5,
         price,
-        supplier: document.getElementById('add-prod-supplier').value || '-',
-        fungsi: document.getElementById('add-prod-fungsi').value || '-',
+        supplier: document.getElementById('add-prod-supplier')?.value || '-',
+        fungsi: document.getElementById('add-prod-fungsi')?.value || '-',
         image: tempUploadedImageData || `https://placehold.co/100x100/fb923c/ffffff?text=${encodeURIComponent(sku)}`,
-        catalogOrder: getNextCatalogOrder(document.getElementById('add-prod-origin').value)
+        catalogOrder: getNextCatalogOrder(origin)
       };
 
-      products.unshift(newProd);
+      try {
+        if (isCloudConnected) {
+          await db.collection('products').doc(newProd.id).set({
+            id: newProd.id, sku: newProd.sku, barcode: newProd.barcode,
+            sku_aliases: newProd.skuAliases, name: newProd.name,
+            origin: newProd.origin, category: newProd.category,
+            stock: newProd.stock, min_stock: newProd.minStock,
+            price: newProd.price, warehouse: newProd.warehouse,
+            shelf: newProd.shelf, supplier: newProd.supplier, image: newProd.image,
+            fungsi: newProd.fungsi, catalog_order: newProd.catalogOrder
+          });
+        }
 
-      if (isCloudConnected) {
-        await db.collection('products').doc(newProd.id).set({
-          id: newProd.id, sku: newProd.sku, name: newProd.name,
-          origin: newProd.origin, category: newProd.category,
-          stock: newProd.stock, min_stock: newProd.minStock,
-          price: newProd.price, warehouse: newProd.warehouse,
-          shelf: newProd.shelf, supplier: newProd.supplier, image: newProd.image,
-          fungsi: newProd.fungsi, catalog_order: newProd.catalogOrder
-        });
+        products.unshift(newProd);
+        saveStateLocally();
+        refreshCurrentView();
+
+        const pendingContext = pendingBarcodeAddContext;
+        pendingBarcodeAddContext = null;
+        closeModal('modal-add-product');
+        e.target.reset();
+        tempUploadedImageData = '';
+
+        if (pendingContext?.target === 'inbound') {
+          switchTab('inbound');
+          const input = document.getElementById('inbound-product-input');
+          if (input) input.value = `${newProd.sku} - ${newProd.name}`;
+          const qtyInput = document.getElementById('inbound-qty');
+          if (qtyInput) setTimeout(() => qtyInput.focus(), 150);
+          showToast(`Barang baru "${newProd.name}" terdaftar. Silakan isi Qty Barang Masuk.`);
+        } else if (pendingContext?.target === 'catalog') {
+          const targetTab = newProd.origin === 'import' ? 'import' : 'lokal';
+          switchTab(targetTab);
+          const search = document.getElementById('catalog-search');
+          if (search) search.value = newProd.sku;
+          renderCatalogTable();
+          showToast(`Barang baru "${newProd.name}" terdaftar dan ditemukan di katalog.`);
+        } else {
+          showToast(`Produk "${newProd.name}" berhasil ditambahkan!`);
+        }
+      } catch (error) {
+        console.error('Gagal menyimpan produk:', error);
+        showToast('Gagal menyimpan barang ke database. Data tidak ditambahkan.', 'error');
       }
-
-      saveStateLocally();
-      closeModal('modal-add-product');
-      e.target.reset();
-      tempUploadedImageData = '';
-      refreshCurrentView();
-      showToast(`Produk "${newProd.name}" berhasil ditambahkan!`);
     }
 
     function previewProductImage(e) {
@@ -2985,7 +3114,7 @@
         btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Memproses...';
         btnSubmit.disabled = true;
 
-        let target = products.find(p => p.sku.toLowerCase() === input.toLowerCase() || p.name.toLowerCase() === input.toLowerCase() || `${p.sku} - ${p.name}`.toLowerCase() === input.toLowerCase());
+        let target = products.find(p => getProductScanKeys(p).includes(normalizeScannedBarcode(input)) || p.name.toLowerCase() === input.toLowerCase() || `${p.sku} - ${p.name}`.toLowerCase() === input.toLowerCase());
 
         if (target) {
           const initial = target.stock;
@@ -4012,8 +4141,10 @@
 
     function productHasMutationInReportRange(sku) {
       if (!reportStartDate && !reportEndDate) return true;
+      const product = products.find(p => p.sku === sku);
+      const keys = new Set([sku, ...(product?.skuAliases || [])].map(normalizeScannedBarcode));
       return mutations.some(m => {
-        if (m.sku !== sku) return false;
+        if (!keys.has(normalizeScannedBarcode(m.sku))) return false;
         const key = mutationDateKey(m.date || m.created_at);
         if (!key) return false;
         if (reportStartDate && key < reportStartDate) return false;
@@ -4265,7 +4396,7 @@
     }
 
     function updateDatalists() {
-      const options = products.map(p => `<option value="${p.sku} - ${p.name}"></option>`).join('');
+      const options = products.map(p => `<option value="${p.sku} - ${p.name}"></option><option value="${p.barcode || p.sku}"></option>`).join('');
       setElementHTML('datalist-products', options);
     }
 
@@ -4283,6 +4414,7 @@
 
     function closeModal(modalId) {
       if (modalId === 'modal-barcode-scanner') stopBarcodeScanner();
+      if (modalId === 'modal-add-product') pendingBarcodeAddContext = null;
       const el = document.getElementById(modalId);
       if (el) el.classList.add('hidden');
     }
@@ -4306,7 +4438,8 @@
         cardImgEl.onclick = () => showEnlargedImage(cardImgEl.src, safeName);
       }
 
-      const itemMutations = mutations.filter(m => m.sku === sku);
+      const itemKeys = new Set([item.sku, ...(item.skuAliases || [])].map(normalizeScannedBarcode));
+      const itemMutations = mutations.filter(m => itemKeys.has(normalizeScannedBarcode(m.sku)));
       if (itemMutations.length === 0) {
         setElementHTML('modal-card-tbody', `<tr><td colspan="6" class="p-4 text-center text-slate-500">Belum ada riwayat kartu stok.</td></tr>`);
       } else {
@@ -4342,13 +4475,14 @@
       const svgEl = document.getElementById('barcode-svg');
       try {
         if (typeof JsBarcode === 'function' && svgEl) {
-          JsBarcode(svgEl, String(item.sku), {
+          const barcodeValue = String(item.barcode || item.sku || '').trim().toUpperCase();
+          JsBarcode(svgEl, barcodeValue, {
             format: 'CODE128', lineColor: '#000000', width: 2, height: 58,
             displayValue: true, fontOptions: 'bold', fontSize: 14,
             margin: 6, textMargin: 2, background: '#ffffff'
           });
           if (statusEl) {
-            statusEl.innerText = `Barcode CODE 128 • SKU: ${item.sku}`;
+            statusEl.innerText = `Barcode CODE 128 • ${barcodeValue}`;
             statusEl.className = 'text-[10px] text-emerald-700 font-bold';
           }
         } else if (statusEl) {
@@ -4370,6 +4504,12 @@
 
     function normalizeScannedBarcode(value) {
       return String(value || '').replace(/\s+/g, ' ').trim().toUpperCase();
+    }
+
+    function getProductScanKeys(product) {
+      return [product?.barcode, product?.sku, ...(product?.skuAliases || [])]
+        .map(normalizeScannedBarcode)
+        .filter(Boolean);
     }
 
     async function stopBarcodeScanner() {
@@ -4444,8 +4584,8 @@
       barcodeScannerBusy = false;
       const description = document.getElementById('barcode-scanner-description');
       if (description) description.innerText = target === 'inbound'
-        ? 'Scan barcode SKU untuk mengisi barang pada form Barang Masuk.'
-        : 'Scan barcode SKU untuk mencari dan menampilkan barang pada katalog.';
+        ? 'Scan barcode untuk mengisi barang pada form Barang Masuk. Jika belum terdaftar, Admin dapat menambahkannya langsung.'
+        : 'Scan barcode untuk mencari dan menampilkan barang pada katalog.';
       const resultEl = document.getElementById('barcode-scan-result');
       if (resultEl) resultEl.classList.add('hidden');
       openModal('modal-barcode-scanner');
@@ -4463,9 +4603,29 @@
       if (resultValueEl) resultValueEl.innerText = scanned || '-';
       if (resultEl) resultEl.classList.remove('hidden');
 
-      const item = products.find(p => normalizeScannedBarcode(p.sku) === scanned);
+      const item = products.find(p => getProductScanKeys(p).includes(scanned));
       if (!item) {
-        if (statusEl) statusEl.innerText = `SKU "${scanned}" tidak ditemukan di katalog.`;
+        if (barcodeScannerTarget === 'inbound' && currentRole === 'admin' && scanned) {
+          if (statusEl) statusEl.innerText = `Barcode "${scanned}" belum terdaftar. Lengkapi data barang untuk membuatnya.`;
+          await stopBarcodeScanner();
+          closeModal('modal-barcode-scanner');
+          pendingBarcodeAddContext = { target: 'inbound', scannedCode: scanned };
+          openAddProductModal({ sku: scanned, barcode: scanned });
+          showToast(`Barcode ${scanned} belum terdaftar. Silakan input nama barang.`, 'error');
+          return;
+        }
+
+        if (barcodeScannerTarget === 'catalog' && currentRole === 'admin' && scanned) {
+          if (statusEl) statusEl.innerText = `Barcode "${scanned}" belum terdaftar. Lengkapi data barang untuk membuatnya.`;
+          await stopBarcodeScanner();
+          closeModal('modal-barcode-scanner');
+          pendingBarcodeAddContext = { target: 'catalog', scannedCode: scanned };
+          openAddProductModal({ sku: scanned, barcode: scanned });
+          showToast(`Barcode ${scanned} belum terdaftar. Silakan input nama barang.`, 'error');
+          return;
+        }
+
+        if (statusEl) statusEl.innerText = `Barcode "${scanned}" tidak ditemukan di katalog.`;
         showToast(`Barcode ${scanned || '(kosong)'} tidak ditemukan di katalog.`, 'error');
         setTimeout(() => { barcodeScannerBusy = false; }, 900);
         return;
