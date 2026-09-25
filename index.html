@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-09-24-sku-sort-mobile-modal-v1" />
+  <meta name="app-build" content="2026-09-25-edit-validation-v2" />
   <title>System Stok Digital - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23fb923c'/><text x='50%' y='68%' font-size='65' font-weight='900' font-family='sans-serif' fill='white' text-anchor='middle'>A</text></svg>">
@@ -2293,7 +2293,7 @@
         const stockBadge = isLow ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-emerald-950 text-emerald-400 border border-emerald-800';
 
         const adminButtons = currentRole === 'admin' ? `
-          <button onclick="openEditProductModal('${p.sku}')" class="bg-amber-950/60 text-amber-400 hover:bg-amber-900 border border-amber-500/30 p-1.5 rounded-lg transition" title="Edit Barang">
+          <button onclick="openEditProductModal('${p.id}')" class="bg-amber-950/60 text-amber-400 hover:bg-amber-900 border border-amber-500/30 p-1.5 rounded-lg transition" title="Edit Barang">
             <i class="fa-solid fa-pen-to-square"></i>
           </button>
           <button onclick="deleteProduct('${p.sku}')" class="bg-rose-950/60 text-rose-400 hover:bg-rose-900 border border-rose-500/30 p-1.5 rounded-lg transition" title="Hapus Barang">
@@ -2771,10 +2771,14 @@
       }
     }
 
-    function openEditProductModal(sku) {
+    function openEditProductModal(productIdOrSku) {
       if (currentRole !== 'admin') return;
       clearAllFormErrors();
-      const targetProd = products.find(p => p.sku === sku);
+      const lookup = String(productIdOrSku || '');
+      // Utamakan ID internal agar edit selalu mengenai record yang tepat,
+      // terutama bila data lama pernah memiliki SKU yang sama.
+      const targetProd = products.find(p => String(p.id || '') === lookup)
+        || products.find(p => normalizeCode(p.sku) === normalizeCode(lookup));
       if (!targetProd) return;
 
       tempEditUploadedImageData = '';
@@ -2806,27 +2810,63 @@
       openModal('modal-edit-product');
     }
 
+    function normalizeCode(value) {
+      return String(value || '').trim().toUpperCase();
+    }
+
+    function isSameProductRecord(a, b) {
+      if (!a || !b) return false;
+      const idA = normalizeCode(a.id);
+      const idB = normalizeCode(b.id);
+      if (idA && idB) return idA === idB;
+      return a === b;
+    }
+
+    function productOwnsSku(product, sku) {
+      const code = normalizeCode(sku);
+      if (!product || !code) return false;
+      if (normalizeCode(product.sku) === code) return true;
+      return Array.isArray(product.skuAliases) && product.skuAliases.some(alias => normalizeCode(alias) === code);
+    }
+
+    function productOwnsBarcode(product, barcode) {
+      const code = normalizeCode(barcode);
+      if (!product || !code) return false;
+      return normalizeCode(product.barcode || product.sku) === code;
+    }
+
     async function handleEditProductSubmit(e) {
       e.preventDefault();
       if (currentRole !== 'admin') return;
       clearAllFormErrors();
 
       const id = document.getElementById('edit-prod-id').value;
-      const originalSku = String(document.getElementById('edit-prod-sku').dataset.originalSku || '').trim().toUpperCase();
-      const targetProd = products.find(p => String(p.id) === String(id));
+      const originalSku = normalizeCode(document.getElementById('edit-prod-sku').dataset.originalSku || '');
+      const targetProd = products.find(p => String(p.id || '') === String(id || ''));
       if (!targetProd) return;
 
-      const newSku = String(document.getElementById('edit-prod-sku').value || '').trim().toUpperCase();
-      const newBarcode = String(document.getElementById('edit-prod-barcode').value || newSku).trim().toUpperCase();
+      const newSku = normalizeCode(document.getElementById('edit-prod-sku').value || '');
+      const newBarcode = normalizeCode(document.getElementById('edit-prod-barcode').value || newSku);
       const nameVal = document.getElementById('edit-prod-name').value.trim();
       const catVal = document.getElementById('edit-prod-category').value.trim();
       const minStockVal = parseInt(document.getElementById('edit-prod-min-stock').value, 10);
 
       let isValid = true;
-      const duplicateSku = products.some(p => p !== targetProd && (
-        String(p.sku || '').trim().toUpperCase() === newSku || (p.skuAliases || []).includes(newSku)
-      ));
-      const duplicateBarcode = products.some(p => p !== targetProd && String(p.barcode || p.sku || '').trim().toUpperCase() === newBarcode);
+
+      // Validasi kepemilikan memakai ID barang yang stabil.
+      // Kode yang memang sudah dimiliki oleh barang yang sedang diedit
+      // (termasuk SKU alias miliknya sendiri) tidak dianggap duplikat.
+      const skuOwner = products.find(p => !isSameProductRecord(p, targetProd) && productOwnsSku(p, newSku));
+      const barcodeOwner = products.find(p => !isSameProductRecord(p, targetProd) && productOwnsBarcode(p, newBarcode));
+
+      // Bila kode tidak diubah dari nilai asli milik barang ini, jangan blokir
+      // hanya karena ada representasi data legacy yang ikut terbaca.
+      const skuUnchanged = newSku === originalSku && productOwnsSku(targetProd, originalSku);
+      const barcodeOriginal = normalizeCode(targetProd.barcode || targetProd.sku);
+      const barcodeUnchanged = newBarcode === barcodeOriginal && productOwnsBarcode(targetProd, barcodeOriginal);
+
+      const duplicateSku = !!skuOwner && !skuUnchanged;
+      const duplicateBarcode = !!barcodeOwner && !barcodeUnchanged;
 
       if (!newSku || newSku.length < 3 || duplicateSku) {
         setFieldError('edit-prod-sku', 'err-edit-sku', true, duplicateSku ? `SKU "${newSku}" sudah digunakan oleh barang lain.` : 'SKU minimal 3 karakter.');
@@ -2851,10 +2891,13 @@
       if (!isValid) return;
 
       const oldSku = String(targetProd.sku || '').trim().toUpperCase();
-      const aliases = Array.isArray(targetProd.skuAliases) ? [...targetProd.skuAliases] : [];
+      const previousAliases = Array.isArray(targetProd.skuAliases) ? [...targetProd.skuAliases] : [];
+      const aliases = [...previousAliases];
       if (oldSku && oldSku !== newSku && !aliases.includes(oldSku)) aliases.push(oldSku);
 
-      const previousState = { ...targetProd, skuAliases: [...aliases] };
+      // Simpan snapshot SEBELUM mutasi agar rollback benar-benar mengembalikan
+      // seluruh kondisi record sebelumnya, termasuk SKU alias lama.
+      const previousState = { ...targetProd, skuAliases: [...previousAliases] };
       targetProd.sku = newSku;
       targetProd.barcode = newBarcode;
       targetProd.skuAliases = aliases;
@@ -2891,6 +2934,8 @@
           }, { merge: true });
         }
 
+        // Urutan katalog langsung dihitung ulang berdasarkan SKU terbaru.
+        products.sort(compareProductsForCatalog);
         saveStateLocally();
         closeModal('modal-edit-product');
         refreshCurrentView();
