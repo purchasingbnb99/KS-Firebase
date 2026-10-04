@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-04-license-integration-v1" />
+  <meta name="app-build" content="2026-10-04-license-integration-stok-min-0-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -1359,7 +1359,9 @@
             </div>
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Stok Min</label>
-              <input type="number" id="add-prod-min-stock" value="5" min="1" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <input type="number" id="add-prod-min-stock" value="5" min="0" step="1" aria-describedby="help-add-prod-min-stock" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <span class="text-[9px] text-slate-500 block mt-1" id="help-add-prod-min-stock">Isi 0 jika barang tidak akan distok lagi.</span>
+              <span class="error-text hidden" id="err-add-min-stock">Stok minimum harus 0 atau lebih.</span>
             </div>
           </div>
 
@@ -1468,8 +1470,9 @@
             </div>
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Stok Minimum</label>
-              <input type="number" id="edit-prod-min-stock" min="1" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
-              <span class="error-text hidden" id="err-edit-min-stock">Stok minimum minimal 1.</span>
+              <input type="number" id="edit-prod-min-stock" min="0" step="1" aria-describedby="help-edit-prod-min-stock" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <span class="text-[9px] text-slate-500 block mt-1" id="help-edit-prod-min-stock">Isi 0 jika barang tidak akan distok lagi.</span>
+              <span class="error-text hidden" id="err-edit-min-stock">Stok minimum harus 0 atau lebih.</span>
             </div>
           </div>
 
@@ -2025,6 +2028,13 @@
         .filter(Boolean)
         .filter((v, i, arr) => arr.indexOf(v) === i && v !== sku);
 
+      const minStockRaw = p?.min_stock;
+      const minStockNumber = Number(minStockRaw);
+      const minStock = (minStockRaw === null || minStockRaw === undefined || minStockRaw === '' ||
+                        !Number.isFinite(minStockNumber) || minStockNumber < 0)
+        ? 5
+        : Math.floor(minStockNumber);
+
       return {
         id: p?.id,
         sku,
@@ -2033,7 +2043,7 @@
         name: p?.name || '',
         origin: p?.origin || 'lokal',
         category: p?.category || 'General', stock: Number(p?.stock || 0),
-        minStock: Number(p?.min_stock || 5), price: Number(p?.price || 0),
+        minStock, price: Number(p?.price || 0),
         warehouse: p?.warehouse || 'Gudang Utama A', shelf: p?.shelf || 'A-01',
         supplier: p?.supplier || '-', image: p?.image || '',
         fungsi: p?.fungsi || '-',
@@ -2365,7 +2375,11 @@
       const totalSku = products.length;
       const totalLokal = products.filter(p => p.origin === 'lokal').length;
       const totalImport = products.filter(p => p.origin === 'import').length;
-      const lowStockItems = products.filter(p => p.stock <= p.minStock);
+      const lowStockItems = products.filter(p => {
+        const minStock = Number(p?.minStock);
+        const stock = Number(p?.stock);
+        return Number.isFinite(minStock) && minStock > 0 && Number.isFinite(stock) && stock <= minStock;
+      });
       const totalAssetValue = products.reduce((acc, p) => acc + (p.stock * p.price), 0);
       const pendingApprovals = requests.filter(r => r.status === 'pending').length;
 
@@ -2531,8 +2545,15 @@
       const rows = filtered.map(p => {
         const imgSrc = p.image || 'https://placehold.co/100x100/1e293b/94a3b8?text=BRG';
         const safeName = p.name.replace(/'/g, "\\'");
-        const isLow = p.stock <= p.minStock;
-        const stockBadge = isLow ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-emerald-950 text-emerald-400 border border-emerald-800';
+        const minStock = Number(p?.minStock);
+        const stock = Number(p?.stock);
+        const isNoReorder = Number.isFinite(minStock) && minStock === 0;
+        const isLow = !isNoReorder && Number.isFinite(minStock) && minStock > 0 && Number.isFinite(stock) && stock <= minStock;
+        const stockBadge = isNoReorder
+          ? 'bg-slate-800 text-slate-300 border border-slate-700'
+          : isLow
+            ? 'bg-rose-950 text-rose-400 border border-rose-800'
+            : 'bg-emerald-950 text-emerald-400 border border-emerald-800';
 
         const adminButtons = currentRole === 'admin' ? `
           <button onclick="openEditProductModal('${p.id}')" class="bg-amber-950/60 text-amber-400 hover:bg-amber-900 border border-amber-500/30 p-1.5 rounded-lg transition" title="Edit Barang">
@@ -2557,7 +2578,7 @@
           <td class="p-3"><span class="bg-slate-950 text-slate-300 px-2 py-0.5 rounded-md font-semibold text-[10px] border border-slate-800">${p.category}</span></td>
           <td class="p-3 font-medium text-slate-300">${p.warehouse}</td>
           <td class="p-3 text-center">
-            <span class="inline-flex whitespace-nowrap px-2.5 py-1 rounded-full font-extrabold text-[11px] ${stockBadge}">${p.stock} Pcs</span>
+            <span class="inline-flex whitespace-nowrap px-2.5 py-1 rounded-full font-extrabold text-[11px] ${stockBadge}">${isNoReorder ? 'Tidak Distok' : `${p.stock} Pcs`}</span>
           </td>
           <td class="p-3 text-right font-semibold text-slate-200 whitespace-nowrap">Rp ${p.price.toLocaleString('id-ID')}</td>
           <td class="p-3 text-[11px] text-slate-400 max-w-[150px] truncate" title="${p.fungsi || '-'}">${p.fungsi || '-'}</td>
@@ -3041,7 +3062,8 @@
       document.getElementById('edit-prod-category').value = targetProd.category;
       document.getElementById('edit-prod-warehouse').value = targetProd.warehouse;
       document.getElementById('edit-prod-shelf').value = targetProd.shelf || '';
-      document.getElementById('edit-prod-min-stock').value = targetProd.minStock || 5;
+      const editMinStock = Number(targetProd.minStock);
+      document.getElementById('edit-prod-min-stock').value = Number.isFinite(editMinStock) && editMinStock >= 0 ? Math.floor(editMinStock) : 5;
       document.getElementById('edit-prod-price').value = targetProd.price || 0;
       document.getElementById('edit-prod-supplier').value = targetProd.supplier || '';
       document.getElementById('edit-prod-fungsi').value = targetProd.fungsi || '';
@@ -3126,8 +3148,8 @@
         setFieldError('edit-prod-category', 'err-edit-category', true);
         isValid = false;
       }
-      if (isNaN(minStockVal) || minStockVal < 1) {
-        setFieldError('edit-prod-min-stock', 'err-edit-min-stock', true);
+      if (!Number.isInteger(minStockVal) || minStockVal < 0) {
+        setFieldError('edit-prod-min-stock', 'err-edit-min-stock', true, 'Stok minimum harus 0 atau lebih.');
         isValid = false;
       }
       if (!isValid) return;
@@ -3257,6 +3279,9 @@
       const name = String(nameInput?.value || '').trim();
       const category = String(categoryInput?.value || '').trim();
       const price = parseInt(priceInput?.value || '', 10);
+      const minStockInput = document.getElementById('add-prod-min-stock');
+      const minStockRaw = minStockInput ? minStockInput.value.trim() : '';
+      const minStock = minStockRaw === '' ? 5 : parseInt(minStockRaw, 10);
 
       let isValid = true;
       const duplicateSku = products.some(p => String(p.sku || '').trim().toUpperCase() === sku || (p.skuAliases || []).includes(sku));
@@ -3278,6 +3303,10 @@
         setFieldError('add-prod-category', 'err-add-category', true);
         isValid = false;
       }
+      if (!Number.isInteger(minStock) || minStock < 0) {
+        setFieldError('add-prod-min-stock', 'err-add-min-stock', true, 'Stok minimum harus 0 atau lebih.');
+        isValid = false;
+      }
       if (isNaN(price) || price < 0) {
         setFieldError('add-prod-price', 'err-add-price', true);
         isValid = false;
@@ -3297,7 +3326,7 @@
         warehouse: document.getElementById('add-prod-warehouse')?.value || 'Gudang Utama A',
         shelf: document.getElementById('add-prod-shelf')?.value || 'A-01',
         stock: initialStock,
-        minStock: parseInt(document.getElementById('add-prod-min-stock')?.value || '5', 10) || 5,
+        minStock,
         price,
         supplier: document.getElementById('add-prod-supplier')?.value || '-',
         fungsi: document.getElementById('add-prod-fungsi')?.value || '-',
