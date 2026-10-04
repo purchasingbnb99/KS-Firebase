@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-04-stock-qty-opname-v2" />
+  <meta name="app-build" content="2026-10-04-stock-qty-opname-v3" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -3920,28 +3920,73 @@
       }
     }
 
+    function normalizeAdjustmentLookup(value) {
+      return String(value ?? '')
+        .normalize('NFKC')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/[–—−]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+    }
+
+    function compactAdjustmentLookup(value) {
+      return normalizeAdjustmentLookup(value).replace(/[^A-Z0-9]+/g, '');
+    }
+
     function findProductForAdjustment(input) {
-      const raw = String(input || '').trim();
-      if (!raw) return null;
+      const normalizedInput = normalizeAdjustmentLookup(input);
+      if (!normalizedInput) return null;
 
-      const normalizedInput = normalizeScannedBarcode(raw);
-      const normalizedInputCompact = normalizedInput.replace(/\s+/g, ' ');
+      const compactInput = compactAdjustmentLookup(normalizedInput);
+      const candidates = [];
 
-      return products.find(p => {
-        const scanKeys = typeof getProductScanKeys === 'function' ? getProductScanKeys(p) : [];
-        const normalizedSku = normalizeScannedBarcode(p.sku);
-        const normalizedBarcode = normalizeScannedBarcode(p.barcode || p.sku);
-        const normalizedName = normalizeScannedBarcode(p.name);
-        const normalizedSkuName = normalizeScannedBarcode(`${p.sku} - ${p.name}`);
-        const aliases = Array.isArray(p.skuAliases) ? p.skuAliases.map(normalizeScannedBarcode) : [];
+      products.forEach(product => {
+        const sku = normalizeAdjustmentLookup(product?.sku);
+        const barcode = normalizeAdjustmentLookup(product?.barcode || product?.sku);
+        const name = normalizeAdjustmentLookup(product?.name);
+        const skuName = normalizeAdjustmentLookup(`${product?.sku || ''} - ${product?.name || ''}`);
+        const aliases = Array.isArray(product?.skuAliases)
+          ? product.skuAliases.map(normalizeAdjustmentLookup).filter(Boolean)
+          : [];
 
-        return scanKeys.includes(normalizedInputCompact) ||
-          normalizedSku === normalizedInputCompact ||
-          normalizedBarcode === normalizedInputCompact ||
-          aliases.includes(normalizedInputCompact) ||
-          normalizedName === normalizedInputCompact ||
-          normalizedSkuName === normalizedInputCompact;
-      }) || null;
+        const directKeys = [sku, barcode, name, skuName, ...aliases].filter(Boolean);
+        const directMatch = directKeys.some(key => key === normalizedInput);
+        const compactCodeMatch = [sku, barcode, ...aliases]
+          .map(compactAdjustmentLookup)
+          .filter(Boolean)
+          .includes(compactInput);
+
+        // Untuk input format "SKU - Nama", ambil bagian sebelum delimiter
+        // sebagai fallback sehingga variasi spasi/nama tidak menggagalkan opname.
+        let prefixCode = '';
+        const delimiterIndex = normalizedInput.indexOf(' - ');
+        if (delimiterIndex > 0) prefixCode = normalizeAdjustmentLookup(normalizedInput.slice(0, delimiterIndex));
+        const prefixCompact = compactAdjustmentLookup(prefixCode);
+        const prefixMatch = prefixCode && [sku, barcode, ...aliases].some(key => key === prefixCode);
+        const prefixCompactMatch = prefixCompact && [sku, barcode, ...aliases]
+          .map(compactAdjustmentLookup)
+          .filter(Boolean)
+          .includes(prefixCompact);
+
+        if (directMatch || compactCodeMatch || prefixMatch || prefixCompactMatch) {
+          candidates.push(product);
+        }
+      });
+
+      // Hanya pilih otomatis bila hasilnya unik; ini mencegah salah opname
+      // bila ada data legacy yang benar-benar memiliki kode sama.
+      const unique = [];
+      const seen = new Set();
+      candidates.forEach(product => {
+        const key = String(product?.id || product?.sku || '');
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(product);
+        }
+      });
+
+      return unique.length === 1 ? unique[0] : null;
     }
 
     function updateAdjustmentProductInfo(input) {
@@ -3957,15 +4002,24 @@
         return;
       }
 
+      // Hapus error lama segera setelah barang berhasil dikenali.
+      setFieldError('adj-product-input', 'err-adj-product', false);
+
       const minStock = Number(target.minStock);
       const stock = Number(target.stock);
       const noReorder = Number.isFinite(minStock) && minStock === 0;
-      const status = noReorder ? 'Tidak Distok — tetap bisa dilakukan opname.' : `Stok minimum ${Number.isFinite(minStock) ? minStock : 0} Pcs`;
+      const status = noReorder
+        ? 'Tidak Distok — tetap bisa dilakukan opname.'
+        : `Stok minimum ${Number.isFinite(minStock) ? minStock : 0} Pcs`;
 
       nameEl.textContent = `${target.name} (${target.sku})`;
       stockEl.textContent = `${Number.isFinite(stock) ? stock : 0} Pcs`;
       statusEl.textContent = `Status: ${status}`;
       infoEl.classList.remove('hidden');
+
+      // Simpan ID internal pada field agar submit tetap mengarah ke record yang sama.
+      const inputEl = document.getElementById('adj-product-input');
+      if (inputEl) inputEl.dataset.productId = String(target.id || '');
     }
 
     async function handleStockAdjustmentSubmit(e) {
@@ -3990,7 +4044,9 @@
         const target = findProductForAdjustment(input);
 
         let isValid = true;
-        if (!target) {
+        if (target) {
+          setFieldError('adj-product-input', 'err-adj-product', false);
+        } else {
           setFieldError('adj-product-input', 'err-adj-product', true);
           isValid = false;
         }
