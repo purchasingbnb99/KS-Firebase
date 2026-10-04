@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-09-30-branding-kartustock-v1" />
+  <meta name="app-build" content="2026-10-04-stock-qty-opname-v2" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -18,6 +18,9 @@
   <!-- SCRIPT FIREBASE COMPAT (Firestore) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+  <!-- License client lives in a separate module so future license changes do not require editing the stock system. -->
+  <script src="license-config.js?v=1.0.0"></script>
+  <script src="license-client.js?v=1.0.0"></script>
 
   <style>
     body { font-family: 'Inter', sans-serif; }
@@ -179,8 +182,9 @@
       #app > main > header { min-height: 64px !important; padding: 10px 12px !important; gap: 8px !important; }
       #app > main > header > div:first-child { flex: 1 1 auto !important; min-width: 0 !important; }
       #app > main > header > div:first-child > div:last-child { min-width: 0 !important; flex: 1 1 auto !important; }
-      #app > main > header > #btn-sync-cloud { width: 42px !important; min-width: 42px !important; height: 42px !important; padding: 0 !important; font-size: 0 !important; flex: 0 0 42px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
-      #app > main > header > #btn-sync-cloud i { margin: 0 !important; font-size: 15px !important; }
+      #app > main > header > div:last-child { display: flex !important; align-items: center !important; gap: 8px !important; flex: 0 0 auto !important; }
+      #app > main > header > div:last-child > #btn-sync-cloud { width: 42px !important; min-width: 42px !important; height: 42px !important; padding: 0 !important; font-size: 0 !important; flex: 0 0 42px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+      #app > main > header > div:last-child > #btn-sync-cloud i { margin: 0 !important; font-size: 15px !important; }
       #page-title { font-size: 15px !important; line-height: 1.2 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
       #app > main > header p { font-size: 9px !important; line-height: 1.25 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
       #main-content { padding: 12px !important; overflow-y: auto !important; overflow-x: hidden !important; }
@@ -211,8 +215,9 @@
     }
     body.mobile-device #app.mobile-sidebar-open > aside { transform: translateX(0) !important; }
     body.mobile-device #app > main { width: 100% !important; min-width: 0 !important; }
-    body.mobile-device #app > main > header > #btn-sync-cloud { width: 42px !important; min-width: 42px !important; height: 42px !important; padding: 0 !important; font-size: 0 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
-    body.mobile-device #app > main > header > #btn-sync-cloud i { margin: 0 !important; font-size: 15px !important; }
+    body.mobile-device #app > main > header > div:last-child { display: flex !important; align-items: center !important; gap: 8px !important; flex: 0 0 auto !important; }
+    body.mobile-device #app > main > header > div:last-child > #btn-sync-cloud { width: 42px !important; min-width: 42px !important; height: 42px !important; padding: 0 !important; font-size: 0 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+    body.mobile-device #app > main > header > div:last-child > #btn-sync-cloud i { margin: 0 !important; font-size: 15px !important; }
     body.mobile-device #mobile-menu-btn { display: inline-flex !important; }
     body.mobile-device #mobile-sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(2,6,23,.62); backdrop-filter: blur(2px); z-index: 60; }
     body.mobile-device #app.mobile-sidebar-open + #mobile-sidebar-overlay { display: block !important; }
@@ -249,15 +254,178 @@
       scrollbar-width: thin;
     }
 
+
+
+    /* ============================================================
+       KARTU STOCK - LICENSE CLIENT
+       Isolated styles. Does not alter existing module styles.
+       ============================================================ */
+    body.ks-license-pending #app,
+    body.ks-license-blocked #app {
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
+    #ks-license-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(2, 6, 23, 0.96);
+      backdrop-filter: blur(8px);
+    }
+    #ks-license-gate.hidden { display: none !important; }
+    .ks-license-card {
+      width: min(100%, 430px);
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 22px;
+      padding: 28px;
+      box-shadow: 0 28px 80px rgba(0,0,0,.45);
+      text-align: center;
+      color: #e2e8f0;
+    }
+    .ks-license-logo {
+      width: 58px;
+      height: 58px;
+      margin: 0 auto 16px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      background: #fb923c;
+      color: #0f172a;
+      font-weight: 900;
+      font-size: 21px;
+      box-shadow: 0 0 26px rgba(251,146,60,.22);
+    }
+    #ks-license-gate-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 900;
+    }
+    #ks-license-gate-message {
+      margin-top: 8px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #94a3b8;
+      white-space: pre-line;
+    }
+    #ks-license-gate-meta {
+      margin-top: 18px;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: 1px solid #1e293b;
+      background: #020617;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    #ks-license-gate-meta strong { color: #f8fafc; }
+    #ks-license-retry {
+      margin-top: 18px;
+      width: 100%;
+      min-height: 44px;
+      border: 0;
+      border-radius: 12px;
+      background: #fb923c;
+      color: #0f172a;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    #ks-license-retry:hover { background: #fdba74; }
+    #ks-license-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      background: #020617;
+      color: #94a3b8;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    #ks-license-status-badge.is-checking {
+      border-color: rgba(148,163,184,.35);
+      background: rgba(30,41,59,.8);
+      color: #cbd5e1;
+    }
+    #ks-license-status-badge.is-active {
+      border-color: rgba(16,185,129,.35);
+      background: rgba(6,78,59,.35);
+      color: #6ee7b7;
+    }
+    #ks-license-status-badge.is-warning {
+      border-color: rgba(245,158,11,.4);
+      background: rgba(120,53,15,.32);
+      color: #fbbf24;
+    }
+    #ks-license-status-badge.is-blocked {
+      border-color: rgba(244,63,94,.4);
+      background: rgba(127,29,29,.32);
+      color: #fda4af;
+    }
+    #ks-license-warning {
+      display: none;
+      position: fixed;
+      top: 76px;
+      right: 18px;
+      z-index: 90;
+      max-width: min(420px, calc(100vw - 36px));
+      padding: 10px 13px;
+      border: 1px solid rgba(245,158,11,.4);
+      border-radius: 13px;
+      background: rgba(120,53,15,.94);
+      color: #fde68a;
+      font-size: 11px;
+      font-weight: 800;
+      box-shadow: 0 10px 30px rgba(0,0,0,.28);
+    }
+    #ks-license-warning.is-visible { display: block; }
+    @media (max-width: 767px) {
+      #ks-license-status-badge { min-height: 42px; padding: 0 10px; font-size: 9px; }
+      #ks-license-warning { top: 66px; right: 12px; }
+      .ks-license-card { padding: 24px 20px; }
+    }
+
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 antialiased min-h-screen flex flex-col font-sans">
+<body class="bg-slate-950 text-slate-100 antialiased min-h-screen flex flex-col font-sans ks-license-pending">
 
   <!-- Toast Notification Container -->
   <div id="toast-container" class="hidden fixed top-5 right-5 z-[100] transition-all duration-300 px-4 py-3 rounded-xl text-xs font-bold text-white shadow-2xl flex items-center gap-2">
     <i id="toast-icon" class="fa-solid fa-circle-check"></i>
     <span id="toast-message">Pesan notifikasi</span>
   </div>
+
+
+  <!-- ============================================================
+       LICENSE GATE
+       Shown before Kartu Stock starts cloud sync.
+       ============================================================ -->
+  <div id="ks-license-gate" class="hidden" aria-live="assertive">
+    <div class="ks-license-card" role="dialog" aria-modal="true" aria-labelledby="ks-license-gate-title">
+      <div class="ks-license-logo">KS</div>
+      <h2 id="ks-license-gate-title">Memeriksa License...</h2>
+      <p id="ks-license-gate-message">Mohon tunggu. Kartu Stock sedang memverifikasi license.</p>
+      <div id="ks-license-gate-meta">
+        <div><strong>License:</strong> <span id="ks-license-code-view">-</span></div>
+        <div><strong>Status:</strong> <span id="ks-license-status-view">CHECKING</span></div>
+        <div><strong>Expiry:</strong> <span id="ks-license-expiry-view">-</span></div>
+      </div>
+      <button id="ks-license-retry" type="button">Coba Periksa Lagi</button>
+    </div>
+  </div>
+
+  <div id="ks-license-warning" role="status" aria-live="polite"></div>
 
   <div id="app" class="flex h-screen overflow-hidden bg-slate-950 w-full">
     
@@ -381,9 +549,12 @@
             <p class="text-xs text-slate-400">KARTU STOCK - Pengelolaan Inventory Multigudang & Real-Time</p>
           </div>
         </div>
-        <button onclick="loadAllDataFromCloud()" id="btn-sync-cloud" class="bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 px-3 py-1.5 rounded-xl border border-slate-700 transition flex items-center gap-1.5">
+        <div class="flex items-center gap-2 shrink-0">
+          <span id="ks-license-status-badge" aria-live="polite">LICENSE CHECKING...</span>
+          <button onclick="loadAllDataFromCloud()" id="btn-sync-cloud" class="bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 px-3 py-1.5 rounded-xl border border-slate-700 transition flex items-center gap-1.5">
           <i class="fa-solid fa-rotate"></i> Sync Data Cloud
         </button>
+        </div>
       </header>
 
       <div id="main-content" class="flex-1 overflow-y-auto p-6 space-y-6">
@@ -648,8 +819,15 @@
             <form id="form-adjustment" onsubmit="handleStockAdjustmentSubmit(event)" class="space-y-4" novalidate>
               <div>
                 <label class="text-xs font-bold text-slate-300 block mb-1">Nama / Kode SKU Barang *</label>
-                <input type="text" id="adj-product-input" list="datalist-products" placeholder="Ketik nama barang atau SKU..." required class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none" />
+                <input type="text" id="adj-product-input" list="datalist-products" oninput="updateAdjustmentProductInfo(this.value)" placeholder="Ketik nama, SKU, barcode, atau alias SKU..." required class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none" />
                 <span class="error-text hidden" id="err-adj-product">Pilih barang yang terdaftar di sistem.</span>
+                <div id="adj-product-info" class="hidden mt-2 rounded-xl border border-purple-500/20 bg-purple-950/20 px-3 py-2 text-[10px] text-slate-300">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="font-bold text-purple-300" id="adj-product-info-name">-</span>
+                    <span class="font-semibold text-slate-300">Stok Sistem: <strong id="adj-product-info-stock" class="text-white">0 Pcs</strong></span>
+                  </div>
+                  <div class="mt-1 text-slate-500" id="adj-product-info-status">Status: -</div>
+                </div>
               </div>
 
               <div>
@@ -1188,8 +1366,9 @@
             </div>
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Stok Min</label>
-              <input type="number" id="add-prod-min-stock" value="5" min="0" step="1" aria-describedby="add-prod-min-stock-help" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
-              <span id="add-prod-min-stock-help" class="text-[9px] text-slate-500 block mt-1">Isi 0 jika barang tidak akan distok lagi.</span>
+              <input type="number" id="add-prod-min-stock" value="5" min="0" step="1" aria-describedby="help-add-prod-min-stock" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <span class="text-[9px] text-slate-500 block mt-1" id="help-add-prod-min-stock">Isi 0 jika barang tidak akan distok lagi.</span>
+              <span class="error-text hidden" id="err-add-min-stock">Stok minimum harus 0 atau lebih.</span>
             </div>
           </div>
 
@@ -1298,9 +1477,9 @@
             </div>
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Stok Minimum</label>
-              <input type="number" id="edit-prod-min-stock" min="0" step="1" aria-describedby="edit-prod-min-stock-help" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
-              <span id="edit-prod-min-stock-help" class="text-[9px] text-slate-500 block mt-1">Isi 0 jika barang tidak akan distok lagi.</span>
-              <span class="error-text hidden" id="err-edit-min-stock">Stok minimum minimal 0.</span>
+              <input type="number" id="edit-prod-min-stock" min="0" step="1" aria-describedby="help-edit-prod-min-stock" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <span class="text-[9px] text-slate-500 block mt-1" id="help-edit-prod-min-stock">Isi 0 jika barang tidak akan distok lagi.</span>
+              <span class="error-text hidden" id="err-edit-min-stock">Stok minimum harus 0 atau lebih.</span>
             </div>
           </div>
 
@@ -1856,6 +2035,13 @@
         .filter(Boolean)
         .filter((v, i, arr) => arr.indexOf(v) === i && v !== sku);
 
+      const minStockRaw = p?.min_stock;
+      const minStockNumber = Number(minStockRaw);
+      const minStock = (minStockRaw === null || minStockRaw === undefined || minStockRaw === '' ||
+                        !Number.isFinite(minStockNumber) || minStockNumber < 0)
+        ? 5
+        : Math.floor(minStockNumber);
+
       return {
         id: p?.id,
         sku,
@@ -1864,12 +2050,7 @@
         name: p?.name || '',
         origin: p?.origin || 'lokal',
         category: p?.category || 'General', stock: Number(p?.stock || 0),
-        minStock: (() => {
-          const raw = p?.min_stock;
-          if (raw === null || raw === undefined || raw === '') return 5;
-          const value = Number(raw);
-          return Number.isFinite(value) && value >= 0 ? value : 5;
-        })(), price: Number(p?.price || 0),
+        minStock, price: Number(p?.price || 0),
         warehouse: p?.warehouse || 'Gudang Utama A', shelf: p?.shelf || 'A-01',
         supplier: p?.supplier || '-', image: p?.image || '',
         fungsi: p?.fungsi || '-',
@@ -2201,8 +2382,11 @@
       const totalSku = products.length;
       const totalLokal = products.filter(p => p.origin === 'lokal').length;
       const totalImport = products.filter(p => p.origin === 'import').length;
-      // Stok Min = 0 berarti barang tidak lagi dikendalikan untuk reorder.
-      const lowStockItems = products.filter(p => Number(p?.minStock) > 0 && Number(p?.stock ?? 0) <= Number(p.minStock));
+      const lowStockItems = products.filter(p => {
+        const minStock = Number(p?.minStock);
+        const stock = Number(p?.stock);
+        return Number.isFinite(minStock) && minStock > 0 && Number.isFinite(stock) && stock <= minStock;
+      });
       const totalAssetValue = products.reduce((acc, p) => acc + (p.stock * p.price), 0);
       const pendingApprovals = requests.filter(r => r.status === 'pending').length;
 
@@ -2368,9 +2552,15 @@
       const rows = filtered.map(p => {
         const imgSrc = p.image || 'https://placehold.co/100x100/1e293b/94a3b8?text=BRG';
         const safeName = p.name.replace(/'/g, "\\'");
-        // Barang dengan Stok Min = 0 tidak ditandai sebagai stok kritis.
-        const isLow = Number(p?.minStock) > 0 && Number(p?.stock ?? 0) <= Number(p.minStock);
-        const stockBadge = isLow ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-emerald-950 text-emerald-400 border border-emerald-800';
+        const minStock = Number(p?.minStock);
+        const stock = Number(p?.stock);
+        const isNoReorder = Number.isFinite(minStock) && minStock === 0;
+        const isLow = !isNoReorder && Number.isFinite(minStock) && minStock > 0 && Number.isFinite(stock) && stock <= minStock;
+        const stockBadge = isNoReorder
+          ? 'bg-slate-800 text-slate-300 border border-slate-700'
+          : isLow
+            ? 'bg-rose-950 text-rose-400 border border-rose-800'
+            : 'bg-emerald-950 text-emerald-400 border border-emerald-800';
 
         const adminButtons = currentRole === 'admin' ? `
           <button onclick="openEditProductModal('${p.id}')" class="bg-amber-950/60 text-amber-400 hover:bg-amber-900 border border-amber-500/30 p-1.5 rounded-lg transition" title="Edit Barang">
@@ -2395,7 +2585,10 @@
           <td class="p-3"><span class="bg-slate-950 text-slate-300 px-2 py-0.5 rounded-md font-semibold text-[10px] border border-slate-800">${p.category}</span></td>
           <td class="p-3 font-medium text-slate-300">${p.warehouse}</td>
           <td class="p-3 text-center">
-            <span class="inline-flex whitespace-nowrap px-2.5 py-1 rounded-full font-extrabold text-[11px] ${stockBadge}">${p.stock} Pcs</span>
+            <div class="flex flex-col items-center gap-1">
+              <span class="inline-flex whitespace-nowrap px-2.5 py-1 rounded-full font-extrabold text-[11px] ${stockBadge}">${Number.isFinite(stock) ? `${stock} Pcs` : '0 Pcs'}</span>
+              ${isNoReorder ? '<span class="text-[9px] font-bold text-slate-500">Tidak Distok</span>' : ''}
+            </div>
           </td>
           <td class="p-3 text-right font-semibold text-slate-200 whitespace-nowrap">Rp ${p.price.toLocaleString('id-ID')}</td>
           <td class="p-3 text-[11px] text-slate-400 max-w-[150px] truncate" title="${p.fungsi || '-'}">${p.fungsi || '-'}</td>
@@ -2879,8 +3072,8 @@
       document.getElementById('edit-prod-category').value = targetProd.category;
       document.getElementById('edit-prod-warehouse').value = targetProd.warehouse;
       document.getElementById('edit-prod-shelf').value = targetProd.shelf || '';
-      const editMinStockValue = Number(targetProd.minStock);
-      document.getElementById('edit-prod-min-stock').value = Number.isFinite(editMinStockValue) && editMinStockValue >= 0 ? editMinStockValue : 5;
+      const editMinStock = Number(targetProd.minStock);
+      document.getElementById('edit-prod-min-stock').value = Number.isFinite(editMinStock) && editMinStock >= 0 ? Math.floor(editMinStock) : 5;
       document.getElementById('edit-prod-price').value = targetProd.price || 0;
       document.getElementById('edit-prod-supplier').value = targetProd.supplier || '';
       document.getElementById('edit-prod-fungsi').value = targetProd.fungsi || '';
@@ -3096,6 +3289,9 @@
       const name = String(nameInput?.value || '').trim();
       const category = String(categoryInput?.value || '').trim();
       const price = parseInt(priceInput?.value || '', 10);
+      const minStockInput = document.getElementById('add-prod-min-stock');
+      const minStockRaw = minStockInput ? minStockInput.value.trim() : '';
+      const minStock = minStockRaw === '' ? 5 : parseInt(minStockRaw, 10);
 
       let isValid = true;
       const duplicateSku = products.some(p => String(p.sku || '').trim().toUpperCase() === sku || (p.skuAliases || []).includes(sku));
@@ -3117,6 +3313,10 @@
         setFieldError('add-prod-category', 'err-add-category', true);
         isValid = false;
       }
+      if (!Number.isInteger(minStock) || minStock < 0) {
+        setFieldError('add-prod-min-stock', 'err-add-min-stock', true, 'Stok minimum harus 0 atau lebih.');
+        isValid = false;
+      }
       if (isNaN(price) || price < 0) {
         setFieldError('add-prod-price', 'err-add-price', true);
         isValid = false;
@@ -3136,12 +3336,7 @@
         warehouse: document.getElementById('add-prod-warehouse')?.value || 'Gudang Utama A',
         shelf: document.getElementById('add-prod-shelf')?.value || 'A-01',
         stock: initialStock,
-        minStock: (() => {
-          const raw = document.getElementById('add-prod-min-stock')?.value;
-          if (raw === '' || raw === null || raw === undefined) return 5;
-          const value = parseInt(raw, 10);
-          return Number.isInteger(value) && value >= 0 ? value : 5;
-        })(),
+        minStock,
         price,
         supplier: document.getElementById('add-prod-supplier')?.value || '-',
         fungsi: document.getElementById('add-prod-fungsi')?.value || '-',
@@ -3725,6 +3920,54 @@
       }
     }
 
+    function findProductForAdjustment(input) {
+      const raw = String(input || '').trim();
+      if (!raw) return null;
+
+      const normalizedInput = normalizeScannedBarcode(raw);
+      const normalizedInputCompact = normalizedInput.replace(/\s+/g, ' ');
+
+      return products.find(p => {
+        const scanKeys = typeof getProductScanKeys === 'function' ? getProductScanKeys(p) : [];
+        const normalizedSku = normalizeScannedBarcode(p.sku);
+        const normalizedBarcode = normalizeScannedBarcode(p.barcode || p.sku);
+        const normalizedName = normalizeScannedBarcode(p.name);
+        const normalizedSkuName = normalizeScannedBarcode(`${p.sku} - ${p.name}`);
+        const aliases = Array.isArray(p.skuAliases) ? p.skuAliases.map(normalizeScannedBarcode) : [];
+
+        return scanKeys.includes(normalizedInputCompact) ||
+          normalizedSku === normalizedInputCompact ||
+          normalizedBarcode === normalizedInputCompact ||
+          aliases.includes(normalizedInputCompact) ||
+          normalizedName === normalizedInputCompact ||
+          normalizedSkuName === normalizedInputCompact;
+      }) || null;
+    }
+
+    function updateAdjustmentProductInfo(input) {
+      const infoEl = document.getElementById('adj-product-info');
+      const nameEl = document.getElementById('adj-product-info-name');
+      const stockEl = document.getElementById('adj-product-info-stock');
+      const statusEl = document.getElementById('adj-product-info-status');
+      if (!infoEl || !nameEl || !stockEl || !statusEl) return;
+
+      const target = findProductForAdjustment(input);
+      if (!target) {
+        infoEl.classList.add('hidden');
+        return;
+      }
+
+      const minStock = Number(target.minStock);
+      const stock = Number(target.stock);
+      const noReorder = Number.isFinite(minStock) && minStock === 0;
+      const status = noReorder ? 'Tidak Distok — tetap bisa dilakukan opname.' : `Stok minimum ${Number.isFinite(minStock) ? minStock : 0} Pcs`;
+
+      nameEl.textContent = `${target.name} (${target.sku})`;
+      stockEl.textContent = `${Number.isFinite(stock) ? stock : 0} Pcs`;
+      statusEl.textContent = `Status: ${status}`;
+      infoEl.classList.remove('hidden');
+    }
+
     async function handleStockAdjustmentSubmit(e) {
       e.preventDefault();
       if (currentRole !== 'admin') return;
@@ -3744,11 +3987,7 @@
         const actualStock = stockEl ? parseInt(stockEl.value, 10) : NaN;
         const reason = reasonEl ? reasonEl.value.trim() : '';
 
-        const target = products.find(p =>
-          p.sku.toLowerCase() === input.toLowerCase() ||
-          p.name.toLowerCase() === input.toLowerCase() ||
-          `${p.sku} - ${p.name}`.toLowerCase() === input.toLowerCase()
-        );
+        const target = findProductForAdjustment(input);
 
         let isValid = true;
         if (!target) {
@@ -3857,6 +4096,7 @@
           if (adjustmentProduct) adjustmentProduct.value = '';
           if (adjustmentStock) adjustmentStock.value = '';
           if (adjustmentReason) adjustmentReason.value = '';
+          updateAdjustmentProductInfo('');
           clearAllFormErrors();
         }
         if (btnSubmit) {
@@ -4552,7 +4792,12 @@
     }
 
     function updateDatalists() {
-      const options = products.map(p => `<option value="${p.sku} - ${p.name}"></option><option value="${p.barcode || p.sku}"></option>`).join('');
+      const options = products.map(p => {
+        const aliasOptions = Array.isArray(p.skuAliases)
+          ? p.skuAliases.map(alias => `<option value="${alias}"></option>`).join('')
+          : '';
+        return `<option value="${p.sku} - ${p.name}"></option><option value="${p.barcode || p.sku}"></option>${aliasOptions}`;
+      }).join('');
       setElementHTML('datalist-products', options);
     }
 
@@ -4899,12 +5144,23 @@
       }
     });
 
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       applyMobileDeviceMode();
       setRole('user');
-      switchTab('dashboard');
-      loadAllDataFromCloud();
-      setupRealtimeSync();
+
+      try {
+        const licenseReady = await window.initializeKSLicenseGuard();
+        if (!licenseReady) return;
+
+        switchTab('dashboard');
+        loadAllDataFromCloud();
+        setupRealtimeSync();
+      } catch (error) {
+        console.error('KARTU STOCK license startup failed:', error);
+        if (window.KSLicenseUI && typeof window.KSLicenseUI.block === 'function') {
+          window.KSLicenseUI.block('License client gagal dijalankan.');
+        }
+      }
     });
 
     window.addEventListener('resize', applyMobileDeviceMode);
