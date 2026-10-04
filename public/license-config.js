@@ -6,7 +6,7 @@
  */
 window.KS_LICENSE_CONFIG = Object.freeze({
   appName: 'KARTU STOCK',
-  licenseCode: 'LIC-6E9D101N',
+  licenseCode: 'LIC-6E9D1OIN',
 
   // License Management project (bukan project Kartu Stock).
   // Isi apiKey dan appId dari Firebase Web App milik License Management.
