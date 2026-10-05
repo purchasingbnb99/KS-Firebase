@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-04-stock-qty-opname-v3" />
+  <meta name="app-build" content="2026-10-05-dashboard-asset-split-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -585,12 +585,33 @@
               <div class="p-3 bg-rose-950/80 text-rose-400 rounded-xl border border-rose-800/40"><i class="fa-solid fa-triangle-exclamation text-xl"></i></div>
             </div>
 
-            <div class="bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-800 flex items-center justify-between">
-              <div>
+            <div class="bg-slate-900 p-5 rounded-2xl shadow-sm border border-slate-800 flex items-start justify-between gap-4">
+              <div class="min-w-0 flex-1">
                 <p class="text-xs font-semibold text-slate-400">Total Nilai Aset</p>
-                <p class="text-xl font-bold text-emerald-400 mt-1">Rp <span id="dash-asset-value">0</span></p>
+                <div class="mt-2 space-y-1.5">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <span class="text-xs shrink-0">🇮🇩</span>
+                      <span class="text-[10px] font-semibold text-slate-400">Lokal</span>
+                    </div>
+                    <p class="text-xs font-bold text-sky-300 text-right whitespace-nowrap">Rp <span id="dash-asset-lokal">0</span></p>
+                  </div>
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <span class="text-xs shrink-0">✈️</span>
+                      <span class="text-[10px] font-semibold text-slate-400">Import</span>
+                    </div>
+                    <p class="text-xs font-bold text-indigo-300 text-right whitespace-nowrap">Rp <span id="dash-asset-import">0</span></p>
+                  </div>
+                  <div class="border-t border-slate-700/80 pt-1.5 mt-1.5">
+                    <div class="flex items-end justify-between gap-3">
+                      <span class="text-[10px] font-extrabold uppercase tracking-wide text-slate-300">Total Seluruh Asset</span>
+                      <p class="text-sm font-black text-emerald-400 text-right whitespace-nowrap">Rp <span id="dash-asset-value">0</span></p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="p-3 bg-emerald-950/80 text-emerald-400 rounded-xl border border-emerald-800/40"><i class="fa-solid fa-wallet text-xl"></i></div>
+              <div class="p-3 bg-emerald-950/80 text-emerald-400 rounded-xl border border-emerald-800/40 shrink-0"><i class="fa-solid fa-wallet text-xl"></i></div>
             </div>
           </div>
 
@@ -2387,13 +2408,21 @@
         const stock = Number(p?.stock);
         return Number.isFinite(minStock) && minStock > 0 && Number.isFinite(stock) && stock <= minStock;
       });
-      const totalAssetValue = products.reduce((acc, p) => acc + (p.stock * p.price), 0);
+      const totalAssetLokal = products
+        .filter(p => p.origin === 'lokal')
+        .reduce((acc, p) => acc + (Number(p.stock || 0) * Number(p.price || 0)), 0);
+      const totalAssetImport = products
+        .filter(p => p.origin === 'import')
+        .reduce((acc, p) => acc + (Number(p.stock || 0) * Number(p.price || 0)), 0);
+      const totalAssetValue = totalAssetLokal + totalAssetImport;
       const pendingApprovals = requests.filter(r => r.status === 'pending').length;
 
       setElementText('dash-total-sku', totalSku);
       setElementText('dash-total-lokal', totalLokal);
       setElementText('dash-total-import', totalImport);
       setElementText('dash-low-stock', lowStockItems.length);
+      setElementText('dash-asset-lokal', totalAssetLokal.toLocaleString('id-ID'));
+      setElementText('dash-asset-import', totalAssetImport.toLocaleString('id-ID'));
       setElementText('dash-asset-value', totalAssetValue.toLocaleString('id-ID'));
 
       setElementText('badge-count-lokal', totalLokal);
