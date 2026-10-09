@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-09-product-photo-gallery-v1" />
+  <meta name="app-build" content="2026-10-10-product-gallery-mobile-scroll-v2" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -255,6 +255,123 @@
     }
 
 
+
+    /* ============================================================
+       MOBILE PRODUCT MODAL SCROLL FIX v2
+       Handles phone browsers and narrow desktop windows.
+       Header stays visible; the form is its own scroll container.
+       Desktop layout remains unchanged outside mobile/coarse-pointer modes.
+       ============================================================ */
+    @media screen and (max-width: 767px), (hover: none) and (pointer: coarse) {
+      #modal-add-product,
+      #modal-edit-product {
+        align-items: flex-start !important;
+        justify-content: center !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        box-sizing: border-box !important;
+        padding-top: max(8px, env(safe-area-inset-top)) !important;
+        padding-right: 12px !important;
+        padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+        padding-left: 12px !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior-y: contain !important;
+      }
+
+      #modal-add-product > .modal-product-panel,
+      #modal-edit-product > .modal-product-panel {
+        display: flex !important;
+        flex-direction: column !important;
+        align-self: flex-start !important;
+        flex: 0 0 auto !important;
+        width: min(calc(100vw - 24px), 520px) !important;
+        max-width: min(calc(100vw - 24px), 520px) !important;
+        height: auto !important;
+        max-height: calc(100vh - 24px) !important;
+        max-height: calc(100dvh - 24px) !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+        margin: 0 auto !important;
+        padding: 16px !important;
+      }
+
+      #form-add-product,
+      #form-edit-product {
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        overscroll-behavior-y: contain !important;
+        -webkit-overflow-scrolling: touch !important;
+        touch-action: pan-y !important;
+        scrollbar-width: thin;
+        padding-right: 4px !important;
+      }
+
+      #add-prod-image-gallery,
+      #edit-prod-image-gallery {
+        touch-action: pan-y !important;
+      }
+    }
+
+    /* Android/iOS browser in Desktop Site may report a wide viewport. */
+    body.mobile-device #modal-add-product,
+    body.mobile-device #modal-edit-product {
+      align-items: flex-start !important;
+      justify-content: center !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      box-sizing: border-box !important;
+      padding-top: max(8px, env(safe-area-inset-top)) !important;
+      padding-right: 12px !important;
+      padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+      padding-left: 12px !important;
+      -webkit-overflow-scrolling: touch !important;
+      overscroll-behavior-y: contain !important;
+    }
+
+    body.mobile-device #modal-add-product > .modal-product-panel,
+    body.mobile-device #modal-edit-product > .modal-product-panel {
+      display: flex !important;
+      flex-direction: column !important;
+      align-self: flex-start !important;
+      flex: 0 0 auto !important;
+      width: min(calc(100vw - 24px), 520px) !important;
+      max-width: min(calc(100vw - 24px), 520px) !important;
+      height: auto !important;
+      max-height: calc(100vh - 24px) !important;
+      max-height: calc(100dvh - 24px) !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+      margin: 0 auto !important;
+      padding: 16px !important;
+    }
+
+    body.mobile-device #form-add-product,
+    body.mobile-device #form-edit-product {
+      display: flex !important;
+      flex-direction: column !important;
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      overscroll-behavior-y: contain !important;
+      -webkit-overflow-scrolling: touch !important;
+      touch-action: pan-y !important;
+      scrollbar-width: thin;
+      padding-right: 4px !important;
+    }
+
+    body.mobile-device #add-prod-image-gallery,
+    body.mobile-device #edit-prod-image-gallery {
+      touch-action: pan-y !important;
+    }
 
     /* ============================================================
        KARTU STOCK - LICENSE CLIENT
@@ -5192,7 +5309,17 @@
 
     function openModal(modalId) {
       const el = document.getElementById(modalId);
-      if (el) el.classList.remove('hidden');
+      if (!el) return;
+      el.classList.remove('hidden');
+
+      // Mulai dari bagian teratas setiap kali form Tambah/Edit dibuka.
+      // Di mobile, konten form adalah scroll container internal.
+      if (modalId === 'modal-add-product' || modalId === 'modal-edit-product') {
+        const panel = el.querySelector('.modal-product-panel');
+        const form = el.querySelector('form');
+        if (panel) panel.scrollTop = 0;
+        if (form) form.scrollTop = 0;
+      }
     }
 
     function closeModal(modalId) {
