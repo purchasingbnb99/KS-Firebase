@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import driveService from '../../../server/drive-service.js';
+import driveService from '../../_lib/drive-service.mjs';
 const { env, isAuthConfigured, safeEqual, encodeState, originMatchesRequest, sendJson, bodyObject } = driveService;
 
 export default function handler(req, res) {

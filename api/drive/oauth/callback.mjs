@@ -1,4 +1,4 @@
-import driveService from '../../../server/drive-service.js';
+import driveService from '../../_lib/drive-service.mjs';
 const { env, verifySignedState, sendJson } = driveService;
 
 function htmlEscape(value) {
