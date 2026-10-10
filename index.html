@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-10-product-upsert-realtime-dedupe-v1" />
+  <meta name="app-build" content="2026-10-10-drive-photo-safe-trash-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -2185,14 +2185,83 @@
     }
 
     function isDrivePhotoSource(src) {
-      return String(src || '').startsWith('/api/drive/photos?id=');
+      try {
+        const url = new URL(String(src || ''), window.location.origin);
+        return url.origin === window.location.origin &&
+          url.pathname.replace(/\/+$/, '') === '/api/drive/photos' &&
+          !!url.searchParams.get('id');
+      } catch (_) { return false; }
     }
 
     function extractDrivePhotoId(src) {
-      const value = String(src || '');
-      if (!isDrivePhotoSource(value)) return '';
-      try { return new URL(value, window.location.origin).searchParams.get('id') || ''; }
+      if (!isDrivePhotoSource(src)) return '';
+      try { return new URL(String(src || ''), window.location.origin).searchParams.get('id') || ''; }
       catch (_) { return ''; }
+    }
+
+    function collectProductDrivePhotoIds(product) {
+      const ids = new Set();
+      if (!product || typeof product !== 'object') return [];
+      const addSource = source => {
+        const id = extractDrivePhotoId(source);
+        if (id) ids.add(id);
+      };
+      addSource(product.image);
+      const gallery = Array.isArray(product.image_gallery)
+        ? product.image_gallery
+        : (Array.isArray(product.imageGallery) ? product.imageGallery : []);
+      gallery.forEach(photo => {
+        if (typeof photo === 'string') addSource(photo);
+        else if (photo && typeof photo === 'object') addSource(photo.src || photo.url || '');
+      });
+      return Array.from(ids);
+    }
+
+    // Only trash a Drive photo after a server-backed Firestore check confirms no
+    // remaining product references it. If the check cannot be completed, leave
+    // the file untouched rather than risk deleting a shared image.
+    async function cleanupOrphanedDrivePhotos(fileIds) {
+      const ids = Array.from(new Set((fileIds || []).map(String).filter(Boolean)));
+      const result = { trashed: 0, stillInUse: 0, notFound: 0, failed: 0, referenceCheckSucceeded: false };
+      if (!ids.length) { result.referenceCheckSucceeded = true; return result; }
+
+      const config = await getDrivePhotoIntegrationConfig();
+      if (!config.enabled || !isCloudConnected || !db) return result;
+
+      let snapshot;
+      try {
+        snapshot = await db.collection('products').get({ source: 'server' });
+      } catch (error) {
+        console.warn('Referensi foto Drive tidak dapat diverifikasi; file tetap disimpan.', error?.message || 'FIRESTORE_READ_FAILED');
+        return result;
+      }
+
+      const referencedIds = new Set();
+      snapshot.forEach(doc => {
+        const data = doc.data() || {};
+        collectProductDrivePhotoIds(data).forEach(id => referencedIds.add(id));
+      });
+      result.referenceCheckSucceeded = true;
+
+      for (const fileId of ids) {
+        if (referencedIds.has(fileId)) {
+          result.stillInUse++;
+          continue;
+        }
+        try {
+          const response = await fetch(`/api/drive/photos?id=${encodeURIComponent(fileId)}`, {
+            method: 'DELETE', credentials: 'same-origin', cache: 'no-store'
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (response.ok && payload.trashed === true) result.trashed++;
+          else if (response.status === 404) result.notFound++;
+          else result.failed++;
+        } catch (error) {
+          result.failed++;
+          console.warn('Foto Drive tidak berhasil dipindahkan ke Trash.', error?.message || 'DRIVE_TRASH_FAILED');
+        }
+      }
+      return result;
     }
 
     async function uploadProductPhotosToDrive(photos, sku, createdFileIds) {
@@ -3957,6 +4026,8 @@
       deleteProductById('', sku);
     }
 
+    const productDeleteInProgress = new Set();
+
     function deleteProductById(productId, fallbackSku = '') {
       if (currentRole !== 'admin') return;
       const id = String(productId || '').trim();
@@ -3972,25 +4043,69 @@
         }
       }
       if (!targetProd) return;
+      const deleteLockKey = String(targetProd.id || `sku:${targetProd.sku}:${targetProd.name}`);
 
       customConfirm(
         'Hapus Barang',
-        `Apakah Anda yakin ingin menghapus barang "${targetProd.name}" (${targetProd.sku}) dari katalog?`,
+        `Apakah Anda yakin ingin menghapus barang "${targetProd.name}" (${targetProd.sku}) dari katalog? Foto Drive yang tidak lagi dipakai akan dipindahkan ke Trash, bukan dihapus permanen.`,
         async function() {
+          if (productDeleteInProgress.has(deleteLockKey)) return;
+          productDeleteInProgress.add(deleteLockKey);
+          const productName = targetProd.name;
+          const drivePhotoIds = collectProductDrivePhotoIds(targetProd);
+
+          // First commit the product deletion. If Firestore fails, do not alter
+          // the local catalog and do not touch the Drive photos.
           try {
             if (isCloudConnected && targetProd.id) {
               await db.collection('products').doc(String(targetProd.id)).delete();
             }
-            products = products.filter(p => {
-              if (p === targetProd) return false;
-              return !targetProd.id || String(p.id || '') !== String(targetProd.id);
-            });
-            saveStateLocally();
-            refreshCurrentView();
-            showToast(`Barang "${targetProd.name}" berhasil dihapus!`);
           } catch (error) {
             console.error('Gagal menghapus barang:', error);
-            showToast('Gagal menghapus barang. Data katalog tidak diubah.', 'error');
+            showToast('Gagal menghapus barang di database. Foto Drive tidak diubah.', 'error');
+            productDeleteInProgress.delete(deleteLockKey);
+            return;
+          }
+
+          products = products.filter(p => {
+            if (p === targetProd) return false;
+            return !targetProd.id || String(p.id || '') !== String(targetProd.id);
+          });
+          let localUpdateFailed = false;
+          try {
+            saveStateLocally();
+            refreshCurrentView();
+          } catch (error) {
+            localUpdateFailed = true;
+            console.warn('Barang sudah terhapus dari database, tetapi penyegaran tampilan lokal gagal.', error?.message || 'LOCAL_REFRESH_FAILED');
+          }
+
+          try {
+            let message = localUpdateFailed
+              ? `Barang "${productName}" sudah dihapus dari database. Muat ulang halaman untuk menyegarkan tampilan.`
+              : `Barang "${productName}" berhasil dihapus!`;
+            let toastType = localUpdateFailed ? 'error' : 'success';
+
+            if (drivePhotoIds.length) {
+              const cleanup = await cleanupOrphanedDrivePhotos(drivePhotoIds);
+              if (!cleanup.referenceCheckSucceeded) {
+                message += ' Foto Drive dibiarkan aman karena referensinya belum dapat diverifikasi.';
+                toastType = 'error';
+              } else if (cleanup.failed > 0) {
+                message += ` ${cleanup.failed} foto gagal dipindahkan ke Trash; foto tetap aman di Drive.`;
+                toastType = 'error';
+              } else {
+                message += ` ${cleanup.trashed} foto yang tidak lagi dipakai dipindahkan ke Trash.`;
+                if (cleanup.stillInUse) message += ` ${cleanup.stillInUse} foto tetap disimpan karena masih dipakai barang lain.`;
+                if (cleanup.notFound) message += ` ${cleanup.notFound} file sudah tidak ditemukan atau tidak berada di folder foto produk.`;
+              }
+            }
+            showToast(message, toastType);
+          } catch (error) {
+            console.warn('Barang terhapus, tetapi pembersihan foto Drive tidak tuntas.', error?.message || 'PHOTO_CLEANUP_FAILED');
+            showToast(`Barang "${productName}" terhapus. Foto Drive tetap disimpan karena pembersihan tidak selesai.`, 'error');
+          } finally {
+            productDeleteInProgress.delete(deleteLockKey);
           }
         }
       );
