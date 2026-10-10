@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><title>Setup Google Drive — KARTU STOCK</title>
+  <style>body{font:16px system-ui;background:#0b1120;color:#e2e8f0;margin:0;padding:24px}.card{max-width:600px;margin:8vh auto;background:#111827;border:1px solid #334155;border-radius:16px;padding:24px}label{display:block;font-weight:700;margin:18px 0 8px}input{box-sizing:border-box;width:100%;background:#020617;border:1px solid #475569;border-radius:9px;padding:12px;color:#fff}button{margin-top:16px;background:#fb923c;border:0;border-radius:9px;padding:12px 16px;font-weight:800;cursor:pointer}p{color:#94a3b8;line-height:1.5}.status{margin-top:16px;white-space:pre-wrap;color:#fca5a5}</style>
+</head>
+<body><main class="card"><h1>Hubungkan My Drive</h1><p>Halaman setup ini hanya digunakan oleh pemilik akun Google perusahaan satu kali untuk memberi izin Drive. Kunci setup harus sudah diatur di Environment Variables Vercel. Jangan membagikan kunci setup.</p><form id="setup-form"><label for="setup-key">Kunci setup sementara</label><input type="password" id="setup-key" autocomplete="off" required><button type="submit">Hubungkan Akun Google</button></form><div id="status" class="status" role="status"></div><p>Setelah memberi izin, Google akan mengarahkan kembali ke aplikasi. Jangan mengirim refresh token melalui chat. Simpan hanya di Environment Variables Vercel.</p></main>
+<script>
+const form=document.getElementById('setup-form');const statusEl=document.getElementById('status');
+form.addEventListener('submit',async event=>{event.preventDefault();statusEl.style.color='#fcd34d';statusEl.textContent='Menyiapkan tautan Google OAuth…';const button=form.querySelector('button');button.disabled=true;try{const response=await fetch('/api/drive/oauth/start',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({setupKey:document.getElementById('setup-key').value})});const result=await response.json().catch(()=>({}));if(!response.ok||!result.authorizationUrl)throw new Error(result.error||'Setup belum dapat dimulai.');window.location.assign(result.authorizationUrl);}catch(error){statusEl.style.color='#fca5a5';statusEl.textContent=error.message||'Gagal menyiapkan OAuth.';button.disabled=false;}});
+</script></body></html>
