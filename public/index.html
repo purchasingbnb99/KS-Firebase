@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-10-product-input-gutter-autocomplete-v2" />
+  <meta name="app-build" content="2026-10-10-product-upsert-realtime-dedupe-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -2490,7 +2490,10 @@
 
       db.collection('products').onSnapshot(snapshot => {
         if(isInitProducts) { isInitProducts = false; return; }
-        products = snapshot.docs.map(doc => normalizeProductData(doc.data())).sort(compareProductsForCatalog);
+        products = dedupeProductsById(snapshot.docs.map(doc => {
+          const data = doc.data() || {};
+          return normalizeProductData({ ...data, id: data.id || doc.id });
+        })).sort(compareProductsForCatalog);
         saveStateLocally();
         refreshCurrentView();
       }, error => console.error('Realtime products error:', error));
@@ -3084,6 +3087,33 @@
       if (Number.isFinite(ao) && Number.isFinite(bo) && ao !== bo) return ao - bo;
 
       return String(a?.name || '').localeCompare(String(b?.name || ''), undefined, { sensitivity: 'base' });
+    }
+
+
+    // Keep the in-memory catalog idempotent across Firestore realtime callbacks
+    // and the optimistic local update performed after a successful save.
+    // The stable product ID is the identity; SKU is deliberately not used here.
+    function dedupeProductsById(items) {
+      const seen = new Set();
+      return (Array.isArray(items) ? items : []).filter(product => {
+        const id = String(product?.id || '').trim();
+        if (!id) return true;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+    }
+
+    function upsertProductInMemory(product) {
+      if (!product) return;
+      const id = String(product.id || '').trim();
+      if (id) {
+        // Remove every existing copy first. This handles a listener event that
+        // arrived while the form was waiting for Firestore's write to complete.
+        products = products.filter(item => String(item?.id || '').trim() !== id);
+      }
+      products.unshift(product);
+      products = dedupeProductsById(products).sort(compareProductsForCatalog);
     }
 
     function renderCatalogTable() {
@@ -4106,7 +4136,9 @@
           productDocumentCommitted = true;
         }
 
-        products.unshift(newProd);
+        // Firestore onSnapshot may already have inserted this record while the
+        // write promise was resolving. Upsert by stable ID instead of appending.
+        upsertProductInMemory(newProd);
         saveStateLocally();
         refreshCurrentView();
 
@@ -4469,7 +4501,9 @@
             image: '', catalogOrder: getNextCatalogOrder(origin)
           };
 
-          products.unshift(newProd);
+          // Use an ID-aware upsert to avoid duplicates if the realtime product
+          // listener receives this record while this flow is still completing.
+          upsertProductInMemory(newProd);
 
           if (isCloudConnected) {
             db.collection('products').doc(String(newProd.id)).set({
