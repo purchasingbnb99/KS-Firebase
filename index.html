@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-10-product-gallery-modal-scroll-all-devices-v3" />
+  <meta name="app-build" content="2026-10-10-drive-photo-integration-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -635,7 +635,7 @@
             <button id="btn-role-admin" onclick="requestAdminAccess()" class="py-1 text-[11px] font-bold rounded-md transition text-slate-400 hover:text-white">
               <i class="fa-solid fa-lock mr-1" id="icon-admin-lock"></i> Admin
             </button>
-            <button id="btn-role-user" onclick="setRole('user')" class="py-1 text-[11px] font-bold rounded-md transition bg-emerald-600 text-white shadow">
+            <button id="btn-role-user" onclick="requestStaffAccess()" class="py-1 text-[11px] font-bold rounded-md transition bg-emerald-600 text-white shadow">
               <i class="fa-solid fa-user mr-1"></i> Staff
             </button>
           </div>
@@ -1324,6 +1324,24 @@
       </div>
     </div>
 
+    <!-- Modal Staff Access: only required when private Google Drive photo mode is configured. -->
+    <div id="modal-staff-login" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+      <div class="bg-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center border border-slate-800">
+        <div class="w-12 h-12 bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto mb-3">
+          <i class="fa-solid fa-user-check text-xl"></i>
+        </div>
+        <h3 class="font-bold text-white text-base mb-1">Verifikasi Akses Staff</h3>
+        <p class="text-xs text-slate-400 mb-4">Masukkan PIN akses aplikasi. Anda tidak perlu login ke akun Google perusahaan.</p>
+        <form onsubmit="handleStaffLogin(event)" class="space-y-3">
+          <input type="password" id="staff-pin-input" placeholder="Masukkan PIN Staff" required autocomplete="current-password" class="w-full px-3 py-2.5 text-center text-sm font-bold tracking-widest bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:outline-none" />
+          <div class="flex gap-2 pt-2">
+            <button type="button" onclick="closeModal('modal-staff-login')" class="w-1/2 py-2 text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-xl transition">Tutup</button>
+            <button type="submit" class="w-1/2 py-2 text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition shadow-md">Masuk Staff</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Modal Print PO -->
     <div id="modal-print-po" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[80] overflow-y-auto p-4 flex justify-center">
       <div id="print-po-paper" class="bg-white text-slate-900 rounded-2xl p-8 max-w-2xl w-full my-auto shadow-2xl border border-slate-200">
@@ -1965,11 +1983,182 @@
     let editOriginalProductImages = [];
     let productGalleryImages = [];
     let productGalleryIndex = 0;
+    let drivePhotoIntegrationConfig = null;
+    let drivePhotoIntegrationConfigPromise = null;
+    let drivePhotoModeEnabled = false;
     let barcodeScannerInstance = null;
     let barcodeScannerTarget = null;
     let barcodeScannerBusy = false;
     let pendingBarcodeAddContext = null;
     window.isPrintAfterSubmit = false;
+
+    async function getDrivePhotoIntegrationConfig(force = false) {
+      if (!force && drivePhotoIntegrationConfig) return drivePhotoIntegrationConfig;
+      if (!force && drivePhotoIntegrationConfigPromise) return drivePhotoIntegrationConfigPromise;
+      drivePhotoIntegrationConfigPromise = (async () => {
+        try {
+          const response = await fetch('/api/drive/config', { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+          if (!response.ok) return { enabled: false };
+          const config = await response.json();
+          drivePhotoIntegrationConfig = { enabled: config.enabled === true, authConfigured: config.authConfigured === true };
+          drivePhotoModeEnabled = drivePhotoIntegrationConfig.enabled;
+          return drivePhotoIntegrationConfig;
+        } catch (_) {
+          // Local/static previews or deployments without API routes keep using the existing Firestore image mode.
+          drivePhotoIntegrationConfig = { enabled: false, authConfigured: false };
+          drivePhotoModeEnabled = false;
+          return drivePhotoIntegrationConfig;
+        } finally {
+          drivePhotoIntegrationConfigPromise = null;
+        }
+      })();
+      return drivePhotoIntegrationConfigPromise;
+    }
+
+    async function getServerPhotoSession() {
+      try {
+        const response = await fetch('/api/session', { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+        if (!response.ok) return { authenticated: false, role: null };
+        return await response.json();
+      } catch (_) {
+        return { authenticated: false, role: null };
+      }
+    }
+
+    async function createServerPhotoSession(role, pin) {
+      const response = await fetch('/api/session', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, pin })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.authenticated !== true || result.role !== role) {
+        throw new Error(result.error || 'PIN salah atau sesi tidak dapat dibuat.');
+      }
+      return result;
+    }
+
+    async function requestStaffAccess() {
+      closeMobileSidebar();
+      const config = await getDrivePhotoIntegrationConfig();
+      if (!config.enabled) {
+        setRole('user');
+        return;
+      }
+      const session = await getServerPhotoSession();
+      if (session.authenticated && session.role === 'staff') {
+        setRole('user');
+        refreshCurrentView();
+        return;
+      }
+      if (session.authenticated && session.role === 'admin') {
+        try { await fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' }); } catch (_) {}
+        isAdminAuthenticated = false;
+        setRole('user');
+      }
+      const pinInput = document.getElementById('staff-pin-input');
+      if (pinInput) pinInput.value = '';
+      openModal('modal-staff-login');
+      setTimeout(() => { if (pinInput) pinInput.focus(); }, 100);
+    }
+
+    async function handleStaffLogin(event) {
+      event.preventDefault();
+      const input = document.getElementById('staff-pin-input');
+      const pin = String(input?.value || '');
+      const submitButton = event.target.querySelector('button[type="submit"]');
+      const originalText = submitButton ? submitButton.innerHTML : '';
+      try {
+        if (submitButton) { submitButton.disabled = true; submitButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Memeriksa...'; }
+        const config = await getDrivePhotoIntegrationConfig();
+        if (!config.enabled) {
+          closeModal('modal-staff-login');
+          setRole('user');
+          return;
+        }
+        await createServerPhotoSession('staff', pin);
+        closeModal('modal-staff-login');
+        setRole('user');
+        refreshCurrentView();
+        showToast('Akses Staff berhasil diverifikasi. Foto Drive dapat ditampilkan.');
+      } catch (error) {
+        showToast(error?.message || 'PIN Staff salah atau sesi gagal dibuat.', 'error');
+      } finally {
+        if (submitButton) { submitButton.disabled = false; submitButton.innerHTML = originalText; }
+      }
+    }
+
+    function isDrivePhotoSource(src) {
+      return String(src || '').startsWith('/api/drive/photos?id=');
+    }
+
+    function extractDrivePhotoId(src) {
+      const value = String(src || '');
+      if (!isDrivePhotoSource(value)) return '';
+      try { return new URL(value, window.location.origin).searchParams.get('id') || ''; }
+      catch (_) { return ''; }
+    }
+
+    async function uploadProductPhotosToDrive(photos, sku, createdFileIds) {
+      const config = await getDrivePhotoIntegrationConfig();
+      const inputPhotos = Array.isArray(photos) ? photos : [];
+      if (!config.enabled) return inputPhotos.map(photo => ({ ...photo }));
+
+      const session = await getServerPhotoSession();
+      if (!session.authenticated || session.role !== 'admin') {
+        throw new Error('Sesi Admin untuk penyimpanan foto tidak aktif. Masuk ulang ke Admin sebelum menyimpan galeri.');
+      }
+
+      const stored = [];
+      for (let index = 0; index < inputPhotos.length; index++) {
+        const photo = inputPhotos[index] || {};
+        const src = String(photo.src || '').trim();
+        if (!src.startsWith('data:image/')) {
+          stored.push({ ...photo, src });
+          continue;
+        }
+        const slug = value => String(value || '').normalize('NFKD').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 45) || 'foto';
+        const fileName = `${slug(sku)}-${index + 1}-${slug(photo.label || `foto-${index + 1}`)}.jpg`;
+        const response = await fetch('/api/drive/photos', {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl: src, fileName, label: String(photo.label || `Foto ${index + 1}`).slice(0, 50) })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.fileId || !result.src) {
+          throw new Error(result.error || `Upload foto ${index + 1} ke Drive gagal.`);
+        }
+        createdFileIds.push(result.fileId);
+        stored.push({ ...photo, src: result.src, storage: 'drive', fileId: result.fileId });
+      }
+      return stored;
+    }
+
+    async function cleanupNewDrivePhotos(fileIds) {
+      const ids = Array.from(new Set((fileIds || []).map(String).filter(Boolean)));
+      if (!ids.length || !(await getDrivePhotoIntegrationConfig()).enabled) return;
+      for (const id of ids) {
+        try {
+          await fetch(`/api/drive/photos?id=${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'same-origin' });
+        } catch (error) { console.warn('Gagal membersihkan file foto sementara di Drive:', error); }
+      }
+    }
+
+    async function initializeDrivePhotoAccess() {
+      const config = await getDrivePhotoIntegrationConfig(true);
+      if (!config.enabled) return;
+      const session = await getServerPhotoSession();
+      if (session.authenticated && session.role === 'staff') {
+        isAdminAuthenticated = false;
+        setRole('user');
+        return;
+      }
+      // Never restore an Admin browser session silently on page refresh/shared workstations.
+      if (session.authenticated && session.role === 'admin') {
+        try { await fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' }); } catch (_) {}
+      }
+      isAdminAuthenticated = false;
+      setRole('user');
+      openModal('modal-staff-login');
+    }
 
     function setFieldError(fieldId, errorId, show, customMsg = '') {
       const field = document.getElementById(fieldId);
@@ -2418,28 +2607,48 @@
       return 'bg-rose-950 text-rose-400 border border-rose-800';
     }
 
-    function requestAdminAccess() {
+    async function requestAdminAccess() {
       closeMobileSidebar();
-      if (isAdminAuthenticated) {
+      const config = await getDrivePhotoIntegrationConfig();
+      if (config.authConfigured || config.enabled) {
+        const session = await getServerPhotoSession();
+        if (session.authenticated && session.role === 'admin') {
+          isAdminAuthenticated = true;
+          setRole('admin');
+          return;
+        }
+        isAdminAuthenticated = false;
+      } else if (isAdminAuthenticated) {
         setRole('admin');
-      } else {
-        const pinInput = document.getElementById('admin-pin-input');
-        if (pinInput) pinInput.value = '';
-        openModal('modal-admin-login');
+        return;
       }
+      const pinInput = document.getElementById('admin-pin-input');
+      if (pinInput) pinInput.value = '';
+      openModal('modal-admin-login');
     }
 
-    function handleAdminLogin(e) {
+    async function handleAdminLogin(e) {
       e.preventDefault();
-      const inputPin = document.getElementById('admin-pin-input').value;
-
-      if (inputPin === ADMIN_PIN_SECRET) {
+      const inputPin = String(document.getElementById('admin-pin-input')?.value || '');
+      const submitButton = e.target.querySelector('button[type="submit"]');
+      const originalText = submitButton ? submitButton.innerHTML : '';
+      try {
+        if (submitButton) { submitButton.disabled = true; submitButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Memeriksa...'; }
+        const config = await getDrivePhotoIntegrationConfig();
+        if (config.authConfigured || config.enabled) {
+          await createServerPhotoSession('admin', inputPin);
+        } else if (inputPin !== ADMIN_PIN_SECRET) {
+          throw new Error('PIN Admin Salah!');
+        }
         isAdminAuthenticated = true;
         closeModal('modal-admin-login');
         setRole('admin');
+        refreshCurrentView();
         showToast('Login Admin Berhasil!');
-      } else {
-        showToast('PIN Admin Salah!', 'error');
+      } catch (error) {
+        showToast(error?.message || 'Autentikasi Admin gagal.', 'error');
+      } finally {
+        if (submitButton) { submitButton.disabled = false; submitButton.innerHTML = originalText; }
       }
     }
 
@@ -3431,8 +3640,9 @@
         showToast('Perubahan galeri foto memerlukan koneksi Cloud aktif agar foto tidak hilang. Data barang lainnya tidak diubah.', 'error');
         return;
       }
-      if (addsOrReplacesPhotos && getProductImageSourceLength(editProductImages) > MAX_PRODUCT_IMAGE_DATA_CHARS) {
-        showToast('Total data foto terlalu besar untuk satu dokumen Firestore. Hapus/ganti foto lama atau tunggu integrasi Google Drive.', 'error');
+      const driveEnabledForEdit = (await getDrivePhotoIntegrationConfig()).enabled;
+      if (addsOrReplacesPhotos && !driveEnabledForEdit && getProductImageSourceLength(editProductImages) > MAX_PRODUCT_IMAGE_DATA_CHARS) {
+        showToast('Total data foto terlalu besar untuk satu dokumen Firestore. Hapus/ganti foto lama atau aktifkan penyimpanan Drive.', 'error');
         return;
       }
 
@@ -3466,7 +3676,15 @@
         targetProd.imageGallery = editProductImages.slice(1).map(photo => ({ src: photo.src, label: photo.label }));
       }
 
+      const uploadedDrivePhotoIds = [];
+      let productDocumentCommitted = false;
       try {
+        if (photoFieldsChanged && driveEnabledForEdit && editProductImages.length) {
+          const savedPhotos = await uploadProductPhotosToDrive(editProductImages, targetProd.sku, uploadedDrivePhotoIds);
+          targetProd.image = savedPhotos[0]?.src || `https://placehold.co/100x100/fb923c/ffffff?text=${encodeURIComponent(targetProd.sku)}`;
+          targetProd.imageLabel = savedPhotos[0]?.label || 'Foto Utama';
+          targetProd.imageGallery = savedPhotos.slice(1).map(photo => ({ src: photo.src, label: photo.label }));
+        }
         if (isCloudConnected) {
           const productUpdate = {
             id: targetProd.id,
@@ -3491,6 +3709,7 @@
             productUpdate.image_gallery = targetProd.imageGallery;
           }
           await db.collection('products').doc(String(targetProd.id)).set(productUpdate, { merge: true });
+          productDocumentCommitted = true;
         }
 
         // Urutan katalog langsung dihitung ulang berdasarkan SKU terbaru.
@@ -3502,6 +3721,7 @@
         refreshCurrentView();
         showToast(photoFieldsChanged ? `Data barang "${targetProd.name}" dan galeri foto berhasil diperbarui!` : (oldSku !== newSku ? `SKU berhasil diubah dari ${oldSku} menjadi ${newSku}. Barcode tetap ${newBarcode}.` : `Data barang "${targetProd.name}" berhasil diperbarui!`));
       } catch (error) {
+        if (!productDocumentCommitted) await cleanupNewDrivePhotos(uploadedDrivePhotoIds);
         Object.assign(targetProd, previousState);
         console.error('Gagal memperbarui produk:', error);
         showToast('Gagal memperbarui data barang. Perubahan dibatalkan.', 'error');
@@ -3610,12 +3830,13 @@
         isValid = false;
       }
       if (!isValid) return;
-      if (addProductImages.length > 1 && !isCloudConnected) {
-        showToast('Menyimpan lebih dari 1 foto membutuhkan koneksi Cloud aktif. Barang belum disimpan.', 'error');
+      const driveEnabledForAdd = (await getDrivePhotoIntegrationConfig()).enabled;
+      if ((addProductImages.length > 1 || (driveEnabledForAdd && addProductImages.length > 0)) && !isCloudConnected) {
+        showToast('Menyimpan galeri foto memerlukan koneksi Cloud aktif. Barang belum disimpan.', 'error');
         return;
       }
-      if (getProductImageSourceLength(addProductImages) > MAX_PRODUCT_IMAGE_DATA_CHARS) {
-        showToast('Total data foto terlalu besar untuk satu dokumen Firestore. Kurangi ukuran/jumlah foto.', 'error');
+      if (!driveEnabledForAdd && getProductImageSourceLength(addProductImages) > MAX_PRODUCT_IMAGE_DATA_CHARS) {
+        showToast('Total data foto terlalu besar untuk satu dokumen Firestore. Kurangi ukuran/jumlah foto atau aktifkan penyimpanan Drive.', 'error');
         return;
       }
 
@@ -3642,7 +3863,15 @@
         catalogOrder: getNextCatalogOrder(origin)
       };
 
+      const uploadedDrivePhotoIds = [];
+      let productDocumentCommitted = false;
       try {
+        if (driveEnabledForAdd && addProductImages.length) {
+          const savedPhotos = await uploadProductPhotosToDrive(addProductImages, sku, uploadedDrivePhotoIds);
+          newProd.image = savedPhotos[0]?.src || `https://placehold.co/100x100/fb923c/ffffff?text=${encodeURIComponent(sku)}`;
+          newProd.imageLabel = savedPhotos[0]?.label || 'Foto Utama';
+          newProd.imageGallery = savedPhotos.slice(1).map(photo => ({ src: photo.src, label: photo.label }));
+        }
         if (isCloudConnected) {
           await db.collection('products').doc(newProd.id).set({
             id: newProd.id, sku: newProd.sku, barcode: newProd.barcode,
@@ -3654,6 +3883,7 @@
             image_label: newProd.imageLabel, image_gallery: newProd.imageGallery,
             fungsi: newProd.fungsi, catalog_order: newProd.catalogOrder
           });
+          productDocumentCommitted = true;
         }
 
         products.unshift(newProd);
@@ -3686,6 +3916,7 @@
           showToast(`Produk "${newProd.name}" berhasil ditambahkan!`);
         }
       } catch (error) {
+        if (!productDocumentCommitted) await cleanupNewDrivePhotos(uploadedDrivePhotoIds);
         console.error('Gagal menyimpan produk:', error);
         showToast('Gagal menyimpan barang ke database. Data tidak ditambahkan.', 'error');
       }
@@ -5719,6 +5950,7 @@
         const licenseReady = await window.initializeKSLicenseGuard();
         if (!licenseReady) return;
 
+        await initializeDrivePhotoAccess();
         switchTab('dashboard');
         loadAllDataFromCloud();
         setupRealtimeSync();
