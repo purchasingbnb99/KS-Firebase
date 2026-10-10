@@ -9,9 +9,9 @@ let cachedAccessTokenExpiresAt = 0;
 
 function env(name) { return String(process.env[name] || '').trim(); }
 function isAuthConfigured() {
+  // The app needs the session signer and Admin PIN. Staff access intentionally does not use a PIN.
   return env('KARTU_STOCK_SESSION_SECRET').length >= 32 &&
-    env('KARTU_STOCK_ADMIN_PIN').length >= 8 &&
-    env('KARTU_STOCK_STAFF_PIN').length >= 8;
+    env('KARTU_STOCK_ADMIN_PIN').length >= 8;
 }
 function isDriveConfigured() {
   return isAuthConfigured() && !!env('KARTU_STOCK_GOOGLE_CLIENT_ID') &&
@@ -205,14 +205,23 @@ async function readDrivePhoto(accessToken, fileId) {
   return { file, bytes };
 }
 async function deleteDrivePhoto(accessToken, fileId) {
+  // Safety first: only allow image files created/stored in the dedicated product-photo folder.
   const folder = await getOrCreateProductFolder(accessToken);
   const file = await getDriveFileInProductFolder(accessToken, fileId, folder.id);
   if (!file) return false;
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, {
-    method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` }
+  // Use Drive files.update(trashed=true), not files.delete, so Admin can recover a mistake from Trash.
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,trashed`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trashed: true })
   });
-  if (!response.ok && response.status !== 404) throw new Error('GOOGLE_DRIVE_DELETE_FAILED');
-  return true;
+  if (response.status === 404) return false;
+  if (!response.ok) {
+    await response.arrayBuffer().catch(() => null);
+    throw new Error('GOOGLE_DRIVE_TRASH_FAILED');
+  }
+  const result = await response.json().catch(() => ({}));
+  return result.trashed === true;
 }
 function verifySignedState(state) { return decodeState(state); }
 
