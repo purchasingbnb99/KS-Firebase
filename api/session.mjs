@@ -34,20 +34,29 @@ export default function handler(req, res) {
   if (req.method !== 'POST') return sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
   if (!originMatchesRequest(req)) return sendJson(res, 403, { error: 'ORIGIN_NOT_ALLOWED' });
   if (!isAuthConfigured()) return sendJson(res, 503, { error: 'APP_AUTH_NOT_CONFIGURED' });
-  if (isRateLimited(req)) return sendJson(res, 429, { error: 'Terlalu banyak percobaan PIN. Tunggu 15 menit sebelum mencoba lagi.' });
 
   const body = bodyObject(req);
   const role = String(body.role || '').toLowerCase();
+  if (!['admin', 'staff'].includes(role)) return sendJson(res, 400, { error: 'INVALID_ROLE' });
+
+  // Staff access is intentionally passwordless. The signed Staff session grants photo READ only;
+  // API writes and deletes are still checked separately and require session.role === 'admin'.
+  if (role === 'staff') {
+    const token = signSession('staff');
+    setSessionCookie(req, res, token);
+    return sendJson(res, 200, { authenticated: true, role: 'staff' });
+  }
+
+  // Admin access is never passwordless and remains protected by the server-side PIN.
+  if (isRateLimited(req)) return sendJson(res, 429, { error: 'Terlalu banyak percobaan PIN. Tunggu 15 menit sebelum mencoba lagi.' });
   const pin = String(body.pin || '');
-  if (!['admin', 'staff'].includes(role) || pin.length > 256) return sendJson(res, 400, { error: 'INVALID_CREDENTIALS' });
-  const expected = role === 'admin' ? env('KARTU_STOCK_ADMIN_PIN') : env('KARTU_STOCK_STAFF_PIN');
-  if (!safeEqual(pin, expected)) {
+  if (pin.length > 256 || !safeEqual(pin, env('KARTU_STOCK_ADMIN_PIN'))) {
     recordFailure(req);
-    return sendJson(res, 401, { authenticated: false, error: role === 'admin' ? 'PIN Admin salah.' : 'PIN Staff salah.' });
+    return sendJson(res, 401, { authenticated: false, error: 'PIN Admin salah.' });
   }
 
   attemptBuckets.delete(String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim());
-  const token = signSession(role);
+  const token = signSession('admin');
   setSessionCookie(req, res, token);
-  return sendJson(res, 200, { authenticated: true, role });
+  return sendJson(res, 200, { authenticated: true, role: 'admin' });
 };
