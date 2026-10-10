@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-10-product-save-guard-scrollbar-v1" />
+  <meta name="app-build" content="2026-10-10-product-input-gutter-autocomplete-v2" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -638,6 +638,37 @@
     #modal-add-product > .modal-product-panel::-webkit-scrollbar-thumb:hover,
     #modal-edit-product > .modal-product-panel::-webkit-scrollbar-thumb:hover {
       background: #64748b;
+    }
+
+  
+
+    /* FINAL PRODUCT FORM GUTTER FIX v2
+       Focus rings were being clipped by overflow-x:hidden because grid fields touched
+       the form's left content edge. Provide real inner gutters on both sides.
+       Also suppress browser-restored form suggestions over the next fields. */
+    #form-add-product,
+    #form-edit-product {
+      box-sizing: border-box !important;
+      padding-left: 7px !important;
+      padding-right: 18px !important;
+      padding-bottom: 18px !important;
+      scroll-padding-block: 10px 18px;
+    }
+    #form-add-product > *,
+    #form-edit-product > *,
+    #form-add-product .grid,
+    #form-edit-product .grid {
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+    #form-add-product input:focus-visible,
+    #form-add-product select:focus-visible,
+    #form-add-product textarea:focus-visible,
+    #form-edit-product input:focus-visible,
+    #form-edit-product select:focus-visible,
+    #form-edit-product textarea:focus-visible {
+      position: relative;
+      z-index: 1;
     }
 
   </style>
@@ -1575,7 +1606,7 @@
           <button onclick="closeModal('modal-add-product')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
         </div>
 
-        <form id="form-add-product" onsubmit="handleAddProductSubmit(event)" class="space-y-3" novalidate>
+        <form id="form-add-product" onsubmit="handleAddProductSubmit(event)" class="space-y-3" autocomplete="off" novalidate>
           <div>
             <label class="text-xs font-bold text-slate-300 block mb-1">Foto / Gambar Produk (Maks. 5 Foto)</label>
             <div class="flex items-center gap-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
@@ -1595,7 +1626,7 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Kode SKU *</label>
-              <input type="text" id="add-prod-sku" required placeholder="BRG-001" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none uppercase font-mono" />
+              <input type="text" id="add-prod-sku" required placeholder="BRG-001" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none uppercase font-mono" autocomplete="off" spellcheck="false" autocapitalize="characters" />
               <span class="error-text hidden" id="err-add-sku">SKU min 3 huruf/angka & unik.</span>
             </div>
             <div>
@@ -1618,20 +1649,20 @@
 
           <div>
             <label class="text-xs font-bold text-slate-300 block mb-1">Barcode *</label>
-            <input type="text" id="add-prod-barcode" required placeholder="Scan / Kode Barcode" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono uppercase" />
+            <input type="text" id="add-prod-barcode" required placeholder="Scan / Kode Barcode" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono uppercase" autocomplete="off" spellcheck="false" autocapitalize="characters" />
             <span class="error-text hidden" id="err-add-barcode">Barcode wajib diisi dan harus unik.</span>
           </div>
 
           <div>
             <label class="text-xs font-bold text-slate-300 block mb-1">Nama Barang *</label>
-            <input type="text" id="add-prod-name" required placeholder="Nama lengkap item..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+            <input type="text" id="add-prod-name" required placeholder="Nama lengkap item..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" autocomplete="off" />
             <span class="error-text hidden" id="err-add-name">Nama barang minimal 3 karakter.</span>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Kategori *</label>
-              <input type="text" id="add-prod-category" required placeholder="Hardware / Sparepart..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <input type="text" id="add-prod-category" required placeholder="Hardware / Sparepart..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" autocomplete="off" />
               <span class="error-text hidden" id="err-add-category">Kategori wajib diisi.</span>
             </div>
             <div>
@@ -1643,7 +1674,7 @@
           <div class="grid grid-cols-3 gap-3">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Kode Rak</label>
-              <input type="text" id="add-prod-shelf" placeholder="A-01" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <input type="text" id="add-prod-shelf" placeholder="A-01" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" autocomplete="off" />
             </div>
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Stok Awal</label>
@@ -1665,7 +1696,7 @@
             </div>
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Supplier</label>
-              <input type="text" id="add-prod-supplier" placeholder="Nama PT Supplier" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <input type="text" id="add-prod-supplier" placeholder="Nama PT Supplier" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" autocomplete="off" />
             </div>
           </div>
 
@@ -1691,7 +1722,7 @@
           <button onclick="closeModal('modal-edit-product')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
         </div>
 
-        <form id="form-edit-product" onsubmit="handleEditProductSubmit(event)" class="space-y-3" novalidate>
+        <form id="form-edit-product" onsubmit="handleEditProductSubmit(event)" class="space-y-3" autocomplete="off" novalidate>
           <input type="hidden" id="edit-prod-id" />
           
           <div>
@@ -1713,7 +1744,7 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Kode SKU *</label>
-              <input type="text" id="edit-prod-sku" required placeholder="BRG-001" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono font-bold uppercase" />
+              <input type="text" id="edit-prod-sku" required placeholder="BRG-001" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono font-bold uppercase" autocomplete="off" spellcheck="false" autocapitalize="characters" />
               <span class="error-text hidden" id="err-edit-sku">SKU minimal 3 karakter dan harus unik.</span>
             </div>
             <div>
@@ -1736,20 +1767,20 @@
 
           <div>
             <label class="text-xs font-bold text-slate-300 block mb-1">Barcode *</label>
-            <input type="text" id="edit-prod-barcode" required placeholder="Kode Barcode" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono uppercase" />
+            <input type="text" id="edit-prod-barcode" required placeholder="Kode Barcode" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono uppercase" autocomplete="off" spellcheck="false" autocapitalize="characters" />
             <span class="error-text hidden" id="err-edit-barcode">Barcode wajib diisi dan harus unik.</span>
           </div>
 
           <div>
             <label class="text-xs font-bold text-slate-300 block mb-1">Nama Barang *</label>
-            <input type="text" id="edit-prod-name" required placeholder="Nama barang..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+            <input type="text" id="edit-prod-name" required placeholder="Nama barang..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" autocomplete="off" />
             <span class="error-text hidden" id="err-edit-name">Nama barang minimal 3 karakter.</span>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Kategori *</label>
-              <input type="text" id="edit-prod-category" required placeholder="Kategori..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <input type="text" id="edit-prod-category" required placeholder="Kategori..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" autocomplete="off" />
               <span class="error-text hidden" id="err-edit-category">Kategori wajib diisi.</span>
             </div>
             <div>
@@ -1761,7 +1792,7 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Kode Rak</label>
-              <input type="text" id="edit-prod-shelf" placeholder="A-01" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <input type="text" id="edit-prod-shelf" placeholder="A-01" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" autocomplete="off" />
             </div>
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Stok Minimum</label>
@@ -1778,7 +1809,7 @@
             </div>
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Supplier</label>
-              <input type="text" id="edit-prod-supplier" placeholder="Nama PT Supplier" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+              <input type="text" id="edit-prod-supplier" placeholder="Nama PT Supplier" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" autocomplete="off" />
             </div>
           </div>
 
