@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-10-drive-photo-safe-trash-v1" />
+  <meta name="app-build" content="2026-10-11-staff-no-pin-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -1417,23 +1417,6 @@
       </div>
     </div>
 
-    <!-- Modal Staff Access: only required when private Google Drive photo mode is configured. -->
-    <div id="modal-staff-login" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-      <div class="bg-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center border border-slate-800">
-        <div class="w-12 h-12 bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto mb-3">
-          <i class="fa-solid fa-user-check text-xl"></i>
-        </div>
-        <h3 class="font-bold text-white text-base mb-1">Verifikasi Akses Staff</h3>
-        <p class="text-xs text-slate-400 mb-4">Masukkan PIN akses aplikasi. Anda tidak perlu login ke akun Google perusahaan.</p>
-        <form onsubmit="handleStaffLogin(event)" class="space-y-3">
-          <input type="password" id="staff-pin-input" placeholder="Masukkan PIN Staff" required autocomplete="current-password" class="w-full px-3 py-2.5 text-center text-sm font-bold tracking-widest bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-emerald-400 focus:outline-none" />
-          <div class="flex gap-2 pt-2">
-            <button type="button" onclick="closeModal('modal-staff-login')" class="w-1/2 py-2 text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-xl transition">Tutup</button>
-            <button type="submit" class="w-1/2 py-2 text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition shadow-md">Masuk Staff</button>
-          </div>
-        </form>
-      </div>
-    </div>
 
     <!-- Modal Print PO -->
     <div id="modal-print-po" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[80] overflow-y-auto p-4 flex justify-center">
@@ -2122,14 +2105,18 @@
       }
     }
 
-    async function createServerPhotoSession(role, pin) {
+    async function createServerPhotoSession(role, pin = '') {
+      // Staff sessions are intentionally passwordless and have read-only API capabilities.
+      // Admin sessions always require the server-held Admin PIN.
+      const payload = { role };
+      if (role === 'admin') payload.pin = String(pin || '');
       const response = await fetch('/api/session', {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, pin })
+        body: JSON.stringify(payload)
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || result.authenticated !== true || result.role !== role) {
-        throw new Error(result.error || 'PIN salah atau sesi tidak dapat dibuat.');
+        throw new Error(result.error || 'Sesi akses tidak dapat dibuat.');
       }
       return result;
     }
@@ -2139,6 +2126,7 @@
       const config = await getDrivePhotoIntegrationConfig();
       if (!config.enabled) {
         setRole('user');
+        refreshCurrentView();
         return;
       }
       const session = await getServerPhotoSession();
@@ -2149,38 +2137,16 @@
       }
       if (session.authenticated && session.role === 'admin') {
         try { await fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' }); } catch (_) {}
-        isAdminAuthenticated = false;
-        setRole('user');
       }
-      const pinInput = document.getElementById('staff-pin-input');
-      if (pinInput) pinInput.value = '';
-      openModal('modal-staff-login');
-      setTimeout(() => { if (pinInput) pinInput.focus(); }, 100);
-    }
-
-    async function handleStaffLogin(event) {
-      event.preventDefault();
-      const input = document.getElementById('staff-pin-input');
-      const pin = String(input?.value || '');
-      const submitButton = event.target.querySelector('button[type="submit"]');
-      const originalText = submitButton ? submitButton.innerHTML : '';
+      isAdminAuthenticated = false;
+      setRole('user');
       try {
-        if (submitButton) { submitButton.disabled = true; submitButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Memeriksa...'; }
-        const config = await getDrivePhotoIntegrationConfig();
-        if (!config.enabled) {
-          closeModal('modal-staff-login');
-          setRole('user');
-          return;
-        }
-        await createServerPhotoSession('staff', pin);
-        closeModal('modal-staff-login');
-        setRole('user');
+        await createServerPhotoSession('staff');
         refreshCurrentView();
-        showToast('Akses Staff berhasil diverifikasi. Foto Drive dapat ditampilkan.');
       } catch (error) {
-        showToast(error?.message || 'PIN Staff salah atau sesi gagal dibuat.', 'error');
-      } finally {
-        if (submitButton) { submitButton.disabled = false; submitButton.innerHTML = originalText; }
+        // Keep Staff UI usable for stock lookup if the photo-session endpoint is temporarily unavailable.
+        showToast('Mode Staff aktif, tetapi sesi foto Google Drive gagal dibuat. Foto privat mungkin tidak tampil.', 'error');
+        console.error('Passwordless Staff photo session failed:', error?.message || 'UNKNOWN');
       }
     }
 
@@ -2323,7 +2289,14 @@
       }
       isAdminAuthenticated = false;
       setRole('user');
-      openModal('modal-staff-login');
+      try {
+        // Establish a limited Staff session automatically; no Staff PIN or Google login is needed.
+        await createServerPhotoSession('staff');
+      } catch (error) {
+        // Search/stock UI stays available. Private Drive images may remain unavailable until the API recovers.
+        showToast('Akses Staff tanpa PIN aktif, tetapi sesi foto Google Drive gagal dibuat. Foto privat mungkin tidak tampil.', 'error');
+        console.error('Automatic passwordless Staff session failed:', error?.message || 'UNKNOWN');
+      }
     }
 
     function setFieldError(fieldId, errorId, show, customMsg = '') {
