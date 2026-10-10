@@ -55,11 +55,12 @@ export default async function handler(req, res) {
     if (!fileId) return sendJson(res, 400, { error: 'FILE_ID_REQUIRED' });
     try {
       const accessToken = await getDriveAccessToken();
-      await deleteDrivePhoto(accessToken, fileId);
-      return sendJson(res, 200, { deleted: true });
+      const trashed = await deleteDrivePhoto(accessToken, fileId);
+      if (!trashed) return sendJson(res, 404, { error: 'PHOTO_NOT_FOUND_OR_OUTSIDE_PRODUCT_FOLDER' });
+      return sendJson(res, 200, { trashed: true });
     } catch (error) {
       console.error('Drive photo cleanup failed:', error.message || 'UNKNOWN');
-      return sendJson(res, 502, { error: 'Pembersihan foto sementara gagal.' });
+      return sendJson(res, 502, { error: 'Foto tidak dapat dipindahkan ke Trash saat ini.' });
     }
   }
   return sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
