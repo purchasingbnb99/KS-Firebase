@@ -1,4 +1,4 @@
-import driveService from '../server/drive-service.js';
+import driveService from './_lib/drive-service.mjs';
 const { env, isAuthConfigured, isDriveConfigured, safeEqual, signSession, readSession, setSessionCookie, clearSessionCookie, originMatchesRequest, sendJson, bodyObject } = driveService;
 
 const attemptBuckets = new Map();
