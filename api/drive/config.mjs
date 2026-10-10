@@ -1,4 +1,4 @@
-import driveService from '../../server/drive-service.js';
+import driveService from '../_lib/drive-service.mjs';
 const { isAuthConfigured, isDriveConfigured, sendJson } = driveService;
 
 export default function handler(req, res) {
