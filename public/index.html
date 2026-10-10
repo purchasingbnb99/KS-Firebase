@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-10-drive-api-runtime-fix-v1" />
+  <meta name="app-build" content="2026-10-10-product-save-guard-scrollbar-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -576,6 +576,68 @@
     #add-prod-image-gallery,
     #edit-prod-image-gallery {
       touch-action: pan-y;
+    }
+
+    /* Form gutters: keep focus borders clear of the scrollbar and modal edge. */
+    #form-add-product,
+    #form-edit-product {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      padding-right: 12px !important;
+      padding-bottom: 10px !important;
+      scrollbar-width: thin;
+      scrollbar-color: #475569 #0f172a;
+    }
+    #form-add-product > *,
+    #form-edit-product > *,
+    #form-add-product .grid,
+    #form-edit-product .grid,
+    #form-add-product .grid > *,
+    #form-edit-product .grid > * {
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    #form-add-product input,
+    #form-add-product select,
+    #form-add-product textarea,
+    #form-edit-product input,
+    #form-edit-product select,
+    #form-edit-product textarea {
+      box-sizing: border-box;
+      min-width: 0;
+      max-width: 100%;
+    }
+    #form-add-product::-webkit-scrollbar,
+    #form-edit-product::-webkit-scrollbar,
+    #modal-add-product > .modal-product-panel::-webkit-scrollbar,
+    #modal-edit-product > .modal-product-panel::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    #form-add-product::-webkit-scrollbar-track,
+    #form-edit-product::-webkit-scrollbar-track,
+    #modal-add-product > .modal-product-panel::-webkit-scrollbar-track,
+    #modal-edit-product > .modal-product-panel::-webkit-scrollbar-track {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 999px;
+      margin: 5px 0;
+    }
+    #form-add-product::-webkit-scrollbar-thumb,
+    #form-edit-product::-webkit-scrollbar-thumb,
+    #modal-add-product > .modal-product-panel::-webkit-scrollbar-thumb,
+    #modal-edit-product > .modal-product-panel::-webkit-scrollbar-thumb {
+      background: #475569;
+      border: 2px solid #0f172a;
+      border-radius: 999px;
+    }
+    #form-add-product::-webkit-scrollbar-thumb:hover,
+    #form-edit-product::-webkit-scrollbar-thumb:hover,
+    #modal-add-product > .modal-product-panel::-webkit-scrollbar-thumb:hover,
+    #modal-edit-product > .modal-product-panel::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
     }
 
   </style>
@@ -1612,6 +1674,7 @@
             <textarea id="add-prod-fungsi" rows="2" placeholder="Contoh: Pelumas bearing komponen mesin utama..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none"></textarea>
           </div>
 
+          <div id="add-prod-save-status" class="hidden text-[10px] leading-relaxed text-sky-300" role="status" aria-live="polite"></div>
           <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
             <button type="button" onclick="closeModal('modal-add-product')" class="px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 rounded-xl transition">Batal</button>
             <button type="submit" class="bg-orange-400 hover:bg-orange-300 text-slate-950 px-5 py-2 rounded-xl text-xs font-bold shadow-md transition">Simpan Barang</button>
@@ -1724,6 +1787,7 @@
             <textarea id="edit-prod-fungsi" rows="2" placeholder="Contoh: Pelumas bearing..." class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none"></textarea>
           </div>
 
+          <div id="edit-prod-save-status" class="hidden text-[10px] leading-relaxed text-sky-300" role="status" aria-live="polite"></div>
           <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
             <button type="button" onclick="closeModal('modal-edit-product')" class="px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 rounded-xl transition">Batal</button>
             <button type="submit" class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2 rounded-xl text-xs font-bold shadow-md transition">Update Barang</button>
@@ -1981,6 +2045,8 @@
     let addProductImages = [];
     let editProductImages = [];
     let editOriginalProductImages = [];
+    // Prevent repeat submissions while Firestore/Drive upload is still in flight.
+    const productSubmitInFlight = { add: false, edit: false };
     let productGalleryImages = [];
     let productGalleryIndex = 0;
     let drivePhotoIntegrationConfig = null;
@@ -3032,7 +3098,7 @@
           <button onclick="openEditProductModal('${p.id}')" class="bg-amber-950/60 text-amber-400 hover:bg-amber-900 border border-amber-500/30 p-1.5 rounded-lg transition" title="Edit Barang">
             <i class="fa-solid fa-pen-to-square"></i>
           </button>
-          <button onclick="deleteProduct('${p.sku}')" class="bg-rose-950/60 text-rose-400 hover:bg-rose-900 border border-rose-500/30 p-1.5 rounded-lg transition" title="Hapus Barang">
+          <button onclick="deleteProductById(this.dataset.productId, this.dataset.productSku)" data-product-id="${escapeHtmlAttribute(p.id || '')}" data-product-sku="${escapeHtmlAttribute(p.sku || '')}" class="bg-rose-950/60 text-rose-400 hover:bg-rose-900 border border-rose-500/30 p-1.5 rounded-lg transition" title="Hapus Barang">
             <i class="fa-solid fa-trash"></i>
           </button>` : '';
 
@@ -3578,7 +3644,102 @@
       return normalizeCode(product.barcode || product.sku) === code;
     }
 
+    function setProductFormSaving(kind, isSaving) {
+      const formId = kind === 'add' ? 'form-add-product' : 'form-edit-product';
+      const modalId = kind === 'add' ? 'modal-add-product' : 'modal-edit-product';
+      const statusId = kind === 'add' ? 'add-prod-save-status' : 'edit-prod-save-status';
+      const form = document.getElementById(formId);
+      const modal = document.getElementById(modalId);
+      const status = document.getElementById(statusId);
+      const submitButton = form?.querySelector('button[type="submit"]');
+      const closeButton = modal?.querySelector('.modal-product-panel > div:first-child button');
+
+      if (form) {
+        form.setAttribute('aria-busy', isSaving ? 'true' : 'false');
+        form.querySelectorAll('input, select, textarea, button').forEach(control => {
+          if (isSaving) {
+            if (!control.hasAttribute('data-ks-save-disabled-before')) {
+              control.setAttribute('data-ks-save-disabled-before', control.disabled ? '1' : '0');
+            }
+            control.disabled = true;
+          } else {
+            const wasDisabled = control.getAttribute('data-ks-save-disabled-before');
+            if (wasDisabled !== null) {
+              control.disabled = wasDisabled === '1';
+              control.removeAttribute('data-ks-save-disabled-before');
+            }
+          }
+        });
+      }
+
+      if (closeButton) {
+        if (isSaving) {
+          if (!closeButton.hasAttribute('data-ks-save-disabled-before')) {
+            closeButton.setAttribute('data-ks-save-disabled-before', closeButton.disabled ? '1' : '0');
+          }
+          closeButton.disabled = true;
+          closeButton.setAttribute('aria-label', 'Sedang menyimpan barang');
+        } else {
+          const wasDisabled = closeButton.getAttribute('data-ks-save-disabled-before');
+          if (wasDisabled !== null) {
+            closeButton.disabled = wasDisabled === '1';
+            closeButton.removeAttribute('data-ks-save-disabled-before');
+          }
+          closeButton.removeAttribute('aria-label');
+        }
+      }
+
+      if (submitButton) {
+        if (isSaving) {
+          if (!submitButton.dataset.ksSaveOriginalHtml) submitButton.dataset.ksSaveOriginalHtml = submitButton.innerHTML;
+          submitButton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2" aria-hidden="true"></i>Menyimpan...';
+          submitButton.title = 'Sedang menyimpan data dan foto. Mohon tunggu, jangan klik berulang.';
+          submitButton.disabled = true;
+          submitButton.classList.add('opacity-70', 'cursor-wait');
+        } else {
+          if (submitButton.dataset.ksSaveOriginalHtml) submitButton.innerHTML = submitButton.dataset.ksSaveOriginalHtml;
+          submitButton.removeAttribute('title');
+          submitButton.classList.remove('opacity-70', 'cursor-wait');
+        }
+      }
+
+      if (status) {
+        status.textContent = isSaving ? 'Sedang menyimpan data barang dan foto. Mohon tunggu sampai proses selesai; jangan tekan tombol Simpan/Update lagi.' : '';
+        status.classList.toggle('hidden', !isSaving);
+      }
+    }
+
+    async function handleAddProductSubmit(e) {
+      e.preventDefault();
+      if (currentRole !== 'admin' || productSubmitInFlight.add) return;
+      productSubmitInFlight.add = true;
+      try {
+        await handleAddProductSubmitCore(e);
+      } catch (error) {
+        console.error('Kesalahan tidak tertangani pada penyimpanan barang:', error);
+        showToast('Proses simpan terhenti. Periksa katalog sebelum mencoba lagi agar tidak membuat data ganda.', 'error');
+      } finally {
+        productSubmitInFlight.add = false;
+        setProductFormSaving('add', false);
+      }
+    }
+
     async function handleEditProductSubmit(e) {
+      e.preventDefault();
+      if (currentRole !== 'admin' || productSubmitInFlight.edit) return;
+      productSubmitInFlight.edit = true;
+      try {
+        await handleEditProductSubmitCore(e);
+      } catch (error) {
+        console.error('Kesalahan tidak tertangani pada pembaruan barang:', error);
+        showToast('Proses update terhenti. Periksa data barang sebelum mencoba lagi.', 'error');
+      } finally {
+        productSubmitInFlight.edit = false;
+        setProductFormSaving('edit', false);
+      }
+    }
+
+    async function handleEditProductSubmitCore(e) {
       e.preventDefault();
       if (currentRole !== 'admin') return;
       clearAllFormErrors();
@@ -3640,6 +3801,8 @@
         showToast('Perubahan galeri foto memerlukan koneksi Cloud aktif agar foto tidak hilang. Data barang lainnya tidak diubah.', 'error');
         return;
       }
+      // Lock only after synchronous validation, before checking Drive or saving.
+      setProductFormSaving('edit', true);
       const driveEnabledForEdit = (await getDrivePhotoIntegrationConfig()).enabled;
       if (addsOrReplacesPhotos && !driveEnabledForEdit && getProductImageSourceLength(editProductImages) > MAX_PRODUCT_IMAGE_DATA_CHARS) {
         showToast('Total data foto terlalu besar untuk satu dokumen Firestore. Hapus/ganti foto lama atau aktifkan penyimpanan Drive.', 'error');
@@ -3729,21 +3892,45 @@
     }
 
     function deleteProduct(sku) {
+      // Compatibility wrapper for any older inline action. Ambiguous duplicate SKUs are rejected.
+      deleteProductById('', sku);
+    }
+
+    function deleteProductById(productId, fallbackSku = '') {
       if (currentRole !== 'admin') return;
-      const targetProd = products.find(p => p.sku === sku);
+      const id = String(productId || '').trim();
+      let targetProd = id ? products.find(p => String(p.id || '') === id) : null;
+
+      if (!targetProd && fallbackSku) {
+        const matchingSku = normalizeCode(fallbackSku);
+        const matches = products.filter(p => normalizeCode(p.sku) === matchingSku);
+        if (matches.length === 1) targetProd = matches[0];
+        else if (matches.length > 1) {
+          showToast('SKU ini memiliki lebih dari satu catatan. Pilih tombol Hapus pada baris barang yang tepat.', 'error');
+          return;
+        }
+      }
       if (!targetProd) return;
 
       customConfirm(
         'Hapus Barang',
         `Apakah Anda yakin ingin menghapus barang "${targetProd.name}" (${targetProd.sku}) dari katalog?`,
         async function() {
-          products = products.filter(p => p.sku !== sku);
-          if (isCloudConnected) {
-            await db.collection('products').doc(targetProd.id).delete();
+          try {
+            if (isCloudConnected && targetProd.id) {
+              await db.collection('products').doc(String(targetProd.id)).delete();
+            }
+            products = products.filter(p => {
+              if (p === targetProd) return false;
+              return !targetProd.id || String(p.id || '') !== String(targetProd.id);
+            });
+            saveStateLocally();
+            refreshCurrentView();
+            showToast(`Barang "${targetProd.name}" berhasil dihapus!`);
+          } catch (error) {
+            console.error('Gagal menghapus barang:', error);
+            showToast('Gagal menghapus barang. Data katalog tidak diubah.', 'error');
           }
-          saveStateLocally();
-          refreshCurrentView();
-          showToast(`Barang "${targetProd.name}" berhasil dihapus!`);
         }
       );
     }
@@ -3782,7 +3969,7 @@
       }
     }
 
-    async function handleAddProductSubmit(e) {
+    async function handleAddProductSubmitCore(e) {
       e.preventDefault();
       if (currentRole !== 'admin') return;
       clearAllFormErrors();
@@ -3830,6 +4017,8 @@
         isValid = false;
       }
       if (!isValid) return;
+      // Validation remains interactive; lock form controls immediately before any asynchronous work.
+      setProductFormSaving('add', true);
       const driveEnabledForAdd = (await getDrivePhotoIntegrationConfig()).enabled;
       if ((addProductImages.length > 1 || (driveEnabledForAdd && addProductImages.length > 0)) && !isCloudConnected) {
         showToast('Menyimpan galeri foto memerlukan koneksi Cloud aktif. Barang belum disimpan.', 'error');
