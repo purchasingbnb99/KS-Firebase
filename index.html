@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- KARTU STOCK build: v1.4.1-photo-compression-fix; APP_VERSION intentionally unchanged. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
@@ -1598,12 +1599,12 @@
               </div>
               <div class="flex-1 min-w-0">
                 <input type="file" id="add-prod-image" accept="image/*" multiple onchange="previewProductImage(event)" class="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-orange-400 file:text-slate-950 hover:file:bg-orange-300 cursor-pointer" />
-                <span class="text-[10px] text-slate-500 block mt-1">Pilih beberapa sudut sekaligus. Maks. 2MB per file; dikompresi otomatis.</span>
+                <span class="text-[10px] text-slate-500 block mt-1">Pilih beberapa sudut sekaligus. Maks. 20MB per foto sebelum kompresi; ukuran dioptimalkan otomatis.</span>
                 <span id="add-prod-image-count" class="text-[10px] text-sky-300 block mt-1">0 dari 5 foto</span>
               </div>
             </div>
             <div id="add-prod-image-gallery" class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2"></div>
-            <span class="error-text hidden" id="err-add-img">File harus berupa gambar dan tidak boleh melebihi 2MB.</span>
+            <span class="error-text hidden" id="err-add-img">File harus berupa gambar dan ukuran asli maksimal 20MB.</span>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -1716,12 +1717,12 @@
               </div>
               <div class="flex-1 min-w-0">
                 <input type="file" id="edit-prod-image" accept="image/*" multiple onchange="previewEditProductImage(event)" class="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-orange-400 file:text-slate-950 hover:file:bg-orange-300 cursor-pointer" />
-                <span class="text-[10px] text-slate-500 block mt-1">Tambah foto dari sudut lain. Maks. 2MB per file; dikompresi otomatis.</span>
+                <span class="text-[10px] text-slate-500 block mt-1">Tambah foto dari sudut lain. Maks. 20MB per foto sebelum kompresi; ukuran dioptimalkan otomatis.</span>
                 <span id="edit-prod-image-count" class="text-[10px] text-sky-300 block mt-1">0 dari 5 foto</span>
               </div>
             </div>
             <div id="edit-prod-image-gallery" class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2"></div>
-            <span class="error-text hidden" id="err-edit-img">File harus berupa gambar dan tidak boleh melebihi 2MB.</span>
+            <span class="error-text hidden" id="err-edit-img">File harus berupa gambar dan ukuran asli maksimal 20MB.</span>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -2052,7 +2053,8 @@
     let tempUploadedImageData = ''; // kompatibilitas sementara dengan alur foto lama
     let tempEditUploadedImageData = ''; // kompatibilitas sementara dengan alur foto lama
     const MAX_PRODUCT_PHOTOS = 5;
-    const MAX_SOURCE_IMAGE_BYTES = 2 * 1024 * 1024;
+    // Terima foto asli hingga 20MB agar gambar beresolusi tinggi dapat dikompresi sebelum disimpan.
+    const MAX_SOURCE_IMAGE_BYTES = 20 * 1024 * 1024;
     const MAX_COMPRESSED_PHOTO_BYTES = 90 * 1024;
     // Batas konservatif agar satu dokumen produk tetap jauh di bawah batas Firestore 1 MiB.
     const MAX_PRODUCT_IMAGE_DATA_CHARS = 850000;
@@ -3990,7 +3992,7 @@
         if (!productDocumentCommitted) await cleanupNewDrivePhotos(uploadedDrivePhotoIds);
         Object.assign(targetProd, previousState);
         console.error('Gagal memperbarui produk:', error);
-        showToast('Gagal memperbarui data barang. Perubahan dibatalkan.', 'error');
+        showToast(getProductSaveErrorMessage(error, 'update'), 'error');
       }
     }
 
@@ -4258,7 +4260,7 @@
       } catch (error) {
         if (!productDocumentCommitted) await cleanupNewDrivePhotos(uploadedDrivePhotoIds);
         console.error('Gagal menyimpan produk:', error);
-        showToast('Gagal menyimpan barang ke database. Data tidak ditambahkan.', 'error');
+        showToast(getProductSaveErrorMessage(error, 'create'), 'error');
       }
     }
 
@@ -4346,6 +4348,43 @@
       showToast('Foto dihapus dari daftar. Tekan Simpan/Update Barang untuk menerapkan perubahan.');
     }
 
+    function formatFileSize(bytes) {
+      const value = Number(bytes) || 0;
+      if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)}MB`;
+      return `${Math.max(1, Math.round(value / 1024))}KB`;
+    }
+
+    function getProductSaveErrorMessage(error, operation = 'create') {
+      const fallback = operation === 'update'
+        ? 'Gagal memperbarui barang. Perubahan dibatalkan.'
+        : 'Gagal menyimpan barang. Data tidak ditambahkan.';
+      const raw = String(error?.message || error || '').trim();
+      const code = String(error?.code || '').trim();
+      const diagnostic = `${code} ${raw}`.toLowerCase();
+
+      if (/admin_required|sesi admin untuk penyimpanan foto|pin admin salah|admin session|sesi aplikasi sudah berakhir|sesi.{0,30}berakhir/i.test(diagnostic)) {
+        return 'Sesi Admin tidak aktif untuk menyimpan foto. Masuk ulang ke Admin, lalu coba simpan lagi.';
+      }
+      if (/format_image_not_supported_or_too_large|photo_too_large|foto.*terlalu besar|kompresi.*ukuran aman/i.test(diagnostic)) {
+        return 'Foto masih melewati batas ukuran penyimpanan setelah dikompresi. Coba pilih ulang foto atau gunakan gambar beresolusi lebih rendah.';
+      }
+      if (/permission-denied|missing or insufficient permissions|insufficient permissions/i.test(diagnostic)) {
+        return 'Firestore menolak penyimpanan. Periksa koneksi akun dan Security Rules; tidak ada perubahan yang disimpan.';
+      }
+      if (/google_token_refresh_failed|google_drive_api_failed|upload foto ke google drive gagal|google drive belum dikonfigurasi/i.test(diagnostic)) {
+        return 'Foto gagal diunggah ke Google Drive. Periksa koneksi Drive dan sesi Admin, lalu coba kembali. Barang belum disimpan.';
+      }
+      if (/unavailable|deadline-exceeded|failed to fetch|network|timeout|timed out/i.test(diagnostic)) {
+        return 'Koneksi ke database atau layanan foto terputus. Periksa internet, lalu coba simpan kembali.';
+      }
+      if (raw) {
+        // Show actionable diagnostic text for errors that do not match the common cases.
+        const safeDetail = raw.replace(/[\r\n\t]+/g, ' ').slice(0, 150);
+        return `${fallback} Detail: ${safeDetail}`;
+      }
+      return fallback;
+    }
+
     function loadImageFileAsBitmap(file) {
       if (typeof createImageBitmap === 'function') return createImageBitmap(file);
       return new Promise((resolve, reject) => {
@@ -4374,7 +4413,7 @@
 
     async function compressProductImageFile(file) {
       if (!file || !String(file.type || '').startsWith('image/')) throw new Error('File yang dipilih bukan gambar.');
-      if (file.size > MAX_SOURCE_IMAGE_BYTES) throw new Error(`File "${file.name}" melebihi 2MB.`);
+      if (file.size > MAX_SOURCE_IMAGE_BYTES) throw new Error(`Foto "${file.name}" berukuran ${formatFileSize(file.size)}. Maksimum file asli adalah 20MB; kompresi otomatis belum dapat dijalankan di atas batas ini.`);
 
       const bitmap = await loadImageFileAsBitmap(file);
       try {
