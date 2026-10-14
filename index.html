@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- KARTU STOCK build: v1.4.1-photo-compression-fix; APP_VERSION intentionally unchanged. -->
+<!-- KARTU STOCK build: v1.4.2-sku-barcode-consistency; APP_VERSION intentionally unchanged. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
@@ -1610,7 +1610,7 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Kode SKU *</label>
-              <input type="text" id="add-prod-sku" required placeholder="BRG-001" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none uppercase font-mono" autocomplete="off" spellcheck="false" autocapitalize="characters" />
+              <input type="text" id="add-prod-sku" required placeholder="BRG-001" oninput="syncBarcodeWithSku('add')" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none uppercase font-mono" autocomplete="off" spellcheck="false" autocapitalize="characters" />
               <span class="error-text hidden" id="err-add-sku">SKU min 3 huruf/angka & unik.</span>
             </div>
             <div>
@@ -1633,8 +1633,9 @@
 
           <div>
             <label class="text-xs font-bold text-slate-300 block mb-1">Barcode *</label>
-            <input type="text" id="add-prod-barcode" required placeholder="Scan / Kode Barcode" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono uppercase" autocomplete="off" spellcheck="false" autocapitalize="characters" />
-            <span class="error-text hidden" id="err-add-barcode">Barcode wajib diisi dan harus unik.</span>
+            <input type="text" id="add-prod-barcode" required readonly placeholder="Otomatis mengikuti SKU" class="w-full px-3 py-2 text-xs bg-slate-900 text-slate-400 border border-slate-800 rounded-xl focus:outline-none font-mono uppercase cursor-not-allowed" autocomplete="off" spellcheck="false" autocapitalize="characters" aria-describedby="add-prod-barcode-help" />
+            <p id="add-prod-barcode-help" class="mt-1 text-[10px] text-slate-500">Barcode otomatis sama dengan SKU aktif.</p>
+            <span class="error-text hidden" id="err-add-barcode">Barcode otomatis mengikuti SKU.</span>
           </div>
 
           <div>
@@ -1728,7 +1729,7 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-xs font-bold text-slate-300 block mb-1">Kode SKU *</label>
-              <input type="text" id="edit-prod-sku" required placeholder="BRG-001" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono font-bold uppercase" autocomplete="off" spellcheck="false" autocapitalize="characters" />
+              <input type="text" id="edit-prod-sku" required placeholder="BRG-001" oninput="syncBarcodeWithSku('edit')" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono font-bold uppercase" autocomplete="off" spellcheck="false" autocapitalize="characters" />
               <span class="error-text hidden" id="err-edit-sku">SKU minimal 3 karakter dan harus unik.</span>
             </div>
             <div>
@@ -1751,8 +1752,9 @@
 
           <div>
             <label class="text-xs font-bold text-slate-300 block mb-1">Barcode *</label>
-            <input type="text" id="edit-prod-barcode" required placeholder="Kode Barcode" class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none font-mono uppercase" autocomplete="off" spellcheck="false" autocapitalize="characters" />
-            <span class="error-text hidden" id="err-edit-barcode">Barcode wajib diisi dan harus unik.</span>
+            <input type="text" id="edit-prod-barcode" required readonly placeholder="Otomatis mengikuti SKU" class="w-full px-3 py-2 text-xs bg-slate-900 text-slate-400 border border-slate-800 rounded-xl focus:outline-none font-mono uppercase cursor-not-allowed" autocomplete="off" spellcheck="false" autocapitalize="characters" aria-describedby="edit-prod-barcode-help" />
+            <p id="edit-prod-barcode-help" class="mt-1 text-[10px] text-slate-500">Barcode otomatis sama dengan SKU aktif.</p>
+            <span class="error-text hidden" id="err-edit-barcode">Barcode otomatis mengikuti SKU.</span>
           </div>
 
           <div>
@@ -2039,7 +2041,14 @@
     }
 
     let warehouses = JSON.parse(localStorage.getItem('app_warehouses')) || [];
-    let products = JSON.parse(localStorage.getItem('app_products')) || [];
+    const cachedProductsV142 = JSON.parse(localStorage.getItem('app_products')) || [];
+    // Normalize cached records on load too, before Firestore realtime data arrives.
+    // This is memory-only; it does not write or delete any cloud record.
+    let products = Array.isArray(cachedProductsV142) ? cachedProductsV142.map(product => ({
+      ...product,
+      barcode: String(product?.sku || '').trim().toUpperCase(),
+      image: getProductDisplayImage(product)
+    })) : [];
     let mutations = JSON.parse(localStorage.getItem('app_mutations')) || [];
     let requests = JSON.parse(localStorage.getItem('app_requests')) || [];
 
@@ -2588,6 +2597,20 @@
       };
     }
 
+    function getProductSkuPlaceholder(sku) {
+      const safeSku = String(sku || 'BRG').trim().toUpperCase() || 'BRG';
+      return `https://placehold.co/100x100/fb923c/ffffff?text=${encodeURIComponent(safeSku)}`;
+    }
+
+    function getProductDisplayImage(product) {
+      const sku = String(product?.sku || 'BRG').trim().toUpperCase() || 'BRG';
+      const image = String(product?.image || '').trim();
+      // Placeholder images carry text in their URL. Rebuild it from the active SKU
+      // so a legacy placeholder never displays an old code after a SKU change.
+      if (!image || /placehold\.co/i.test(image)) return getProductSkuPlaceholder(sku);
+      return image;
+    }
+
     function normalizeProductData(p) {
       const sku = String(p?.sku || '').trim().toUpperCase();
       const aliasesRaw = Array.isArray(p?.sku_aliases) ? p.sku_aliases : (Array.isArray(p?.skuAliases) ? p.skuAliases : []);
@@ -2606,14 +2629,16 @@
       return {
         id: p?.id,
         sku,
-        barcode: String(p?.barcode || sku).trim().toUpperCase(),
+        // Policy: barcode is always the active SKU. This normalizes legacy records
+        // in memory without bulk-writing or deleting any existing Firestore data.
+        barcode: sku,
         skuAliases,
         name: p?.name || '',
         origin: p?.origin || 'lokal',
         category: p?.category || 'General', stock: Number(p?.stock || 0),
         minStock, price: Number(p?.price || 0),
         warehouse: p?.warehouse || 'Gudang Utama A', shelf: p?.shelf || 'A-01',
-        supplier: p?.supplier || '-', image: p?.image || '',
+        supplier: p?.supplier || '-', image: getProductDisplayImage({ sku, image: p?.image || '' }),
         imageLabel: String(p?.image_label || p?.imageLabel || 'Foto Utama'),
         imageGallery: (Array.isArray(p?.image_gallery) ? p.image_gallery : (Array.isArray(p?.imageGallery) ? p.imageGallery : []))
           .map((entry, index) => {
@@ -3025,7 +3050,7 @@
         setElementText('badge-low-stock-count', `${lowStockItems.length} Pcs Kritis`);
         
         const rowsHTML = lowStockItems.map(p => {
-          const imgSrc = p.image || 'https://placehold.co/100x100/1e293b/94a3b8?text=BRG';
+          const imgSrc = getProductDisplayImage(p);
           const safeName = p.name.replace(/'/g, "\\'");
           // Estimasi reorder otomatis = kekurangan stok untuk mencapai Stok Min.
           // Contoh: stok 2, stok min 5 => reorder 3. Nilai tetap bisa diubah manual.
@@ -3174,7 +3199,10 @@
 
       const filtered = products.filter(p => {
         const matchesOrigin = currentTab === 'lokal' ? p.origin === 'lokal' : p.origin === 'import';
-        const lookupText = [p.name, p.sku, p.barcode, p.warehouse, ...(p.skuAliases || [])]
+        // Katalog search uses current identity only. Legacy SKU aliases remain
+        // available to operational forms/history, but do not make an old code look
+        // like the product's current SKU in this table.
+        const lookupText = [p.name, p.sku, p.warehouse]
           .map(v => String(v || '').toLowerCase()).join(' ');
         const matchesSearch = lookupText.includes(search);
         const matchesCategory = catFilter === 'all' || p.category === catFilter;
@@ -3187,7 +3215,7 @@
       }
 
       const rows = filtered.map(p => {
-        const imgSrc = p.image || 'https://placehold.co/100x100/1e293b/94a3b8?text=BRG';
+        const imgSrc = getProductDisplayImage(p);
         const safeName = p.name.replace(/'/g, "\\'");
         const minStock = Number(p?.minStock);
         const stock = Number(p?.stock);
@@ -3476,7 +3504,8 @@
       const name = String(getImportField(row, ['Nama Barang', 'Nama', 'Nama Produk'], '')).trim();
       if (!sku || !name) return null;
 
-      const barcodeRaw = String(getImportField(row, ['Barcode', 'Kode Barcode', 'Barcode Produk'], sku) || sku).trim().toUpperCase();
+      // Import files may contain historical/inconsistent barcode values; the
+      // current rule is strict: imported Barcode is the same as the active SKU.
       const aliasRaw = String(getImportField(row, ['SKU Lama / Alias', 'SKU Lama', 'Alias SKU', 'SKU Alias'], '') || '').trim();
       const skuAliases = aliasRaw
         ? aliasRaw.split(/[,;|]/).map(v => v.trim().toUpperCase()).filter(v => v && v !== sku)
@@ -3498,7 +3527,7 @@
       return {
         id: 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
         sku,
-        barcode: barcodeRaw || sku,
+        barcode: sku,
         skuAliases,
         name,
         origin,
@@ -3701,7 +3730,8 @@
       document.getElementById('edit-prod-id').value = targetProd.id;
       document.getElementById('edit-prod-sku').value = targetProd.sku;
       document.getElementById('edit-prod-sku').dataset.originalSku = targetProd.sku;
-      document.getElementById('edit-prod-barcode').value = targetProd.barcode || targetProd.sku;
+      document.getElementById('edit-prod-barcode').value = targetProd.sku;
+      document.getElementById('edit-prod-barcode').readOnly = true;
       
       const editOrigin = document.getElementById('edit-prod-origin');
       if (editOrigin) {
@@ -3726,6 +3756,14 @@
 
     function normalizeCode(value) {
       return String(value || '').trim().toUpperCase();
+    }
+
+    function syncBarcodeWithSku(kind) {
+      const skuId = kind === 'edit' ? 'edit-prod-sku' : 'add-prod-sku';
+      const barcodeId = kind === 'edit' ? 'edit-prod-barcode' : 'add-prod-barcode';
+      const skuInput = document.getElementById(skuId);
+      const barcodeInput = document.getElementById(barcodeId);
+      if (barcodeInput) barcodeInput.value = normalizeCode(skuInput?.value || '');
     }
 
     function isSameProductRecord(a, b) {
@@ -3855,7 +3893,8 @@
       if (!targetProd) return;
 
       const newSku = normalizeCode(document.getElementById('edit-prod-sku').value || '');
-      const newBarcode = normalizeCode(document.getElementById('edit-prod-barcode').value || newSku);
+      // Always enforce barcode=active SKU, independent of submitted field values.
+      const newBarcode = newSku;
       const nameVal = document.getElementById('edit-prod-name').value.trim();
       const catVal = document.getElementById('edit-prod-category').value.trim();
       const minStockVal = parseInt(document.getElementById('edit-prod-min-stock').value, 10);
@@ -3915,6 +3954,7 @@
       }
 
       const oldSku = String(targetProd.sku || '').trim().toUpperCase();
+      const placeholderImageNeedsRefresh = /placehold\.co/i.test(String(targetProd.image || ''));
       const previousAliases = Array.isArray(targetProd.skuAliases) ? [...targetProd.skuAliases] : [];
       const aliases = [...previousAliases];
       if (oldSku && oldSku !== newSku && !aliases.includes(oldSku)) aliases.push(oldSku);
@@ -3938,6 +3978,9 @@
       targetProd.price = parseInt(document.getElementById('edit-prod-price').value, 10) || 0;
       targetProd.supplier = document.getElementById('edit-prod-supplier').value.trim() || '-';
       targetProd.fungsi = document.getElementById('edit-prod-fungsi').value.trim() || '-';
+      if (placeholderImageNeedsRefresh && !photoFieldsChanged) {
+        targetProd.image = getProductSkuPlaceholder(targetProd.sku);
+      }
       if (photoFieldsChanged) {
         targetProd.image = editProductImages[0]?.src || `https://placehold.co/100x100/fb923c/ffffff?text=${encodeURIComponent(targetProd.sku)}`;
         targetProd.imageLabel = editProductImages[0]?.label || 'Foto Utama';
@@ -3975,6 +4018,10 @@
             productUpdate.image = targetProd.image;
             productUpdate.image_label = targetProd.imageLabel;
             productUpdate.image_gallery = targetProd.imageGallery;
+          } else if (placeholderImageNeedsRefresh) {
+            // Refresh only a generated placeholder URL. Real photos and galleries
+            // are left untouched when other product fields are edited.
+            productUpdate.image = targetProd.image;
           }
           await db.collection('products').doc(String(targetProd.id)).set(productUpdate, { merge: true });
           productDocumentCommitted = true;
@@ -3987,7 +4034,7 @@
         editProductImages = [];
         editOriginalProductImages = [];
         refreshCurrentView();
-        showToast(photoFieldsChanged ? `Data barang "${targetProd.name}" dan galeri foto berhasil diperbarui!` : (oldSku !== newSku ? `SKU berhasil diubah dari ${oldSku} menjadi ${newSku}. Barcode tetap ${newBarcode}.` : `Data barang "${targetProd.name}" berhasil diperbarui!`));
+        showToast(photoFieldsChanged ? `Data barang "${targetProd.name}" dan galeri foto berhasil diperbarui!` : (oldSku !== newSku ? `SKU dan Barcode berhasil disamakan dari ${oldSku} menjadi ${newSku}.` : `Data barang "${targetProd.name}" berhasil diperbarui. Barcode mengikuti SKU aktif.`));
       } catch (error) {
         if (!productDocumentCommitted) await cleanupNewDrivePhotos(uploadedDrivePhotoIds);
         Object.assign(targetProd, previousState);
@@ -4104,11 +4151,10 @@
       }
 
       const presetSku = String(preset.sku || '').trim().toUpperCase();
-      const presetBarcode = String(preset.barcode || presetSku).trim().toUpperCase();
       const skuEl = document.getElementById('add-prod-sku');
       const barcodeEl = document.getElementById('add-prod-barcode');
       if (skuEl) skuEl.value = presetSku;
-      if (barcodeEl) barcodeEl.value = presetBarcode;
+      if (barcodeEl) barcodeEl.value = presetSku;
 
       updateWarehouseDropdowns();
       openModal('modal-add-product');
@@ -4131,7 +4177,9 @@
       const categoryInput = document.getElementById('add-prod-category');
       const priceInput = document.getElementById('add-prod-price');
       const sku = String(skuInput?.value || '').trim().toUpperCase();
-      const barcode = String(barcodeInput?.value || sku).trim().toUpperCase();
+      // Barcode is intentionally not independently editable: it must follow SKU.
+      const barcode = sku;
+      if (barcodeInput) barcodeInput.value = sku;
       const name = String(nameInput?.value || '').trim();
       const category = String(categoryInput?.value || '').trim();
       const price = parseInt(priceInput?.value || '', 10);
@@ -4500,7 +4548,8 @@
       const item = products.find(product => normalizeCode(product.sku) === normalizeCode(sku));
       if (!item) return;
       const images = getProductImagesForEditor(item);
-      if (!images.length && item.image) images.push({ src: item.image, label: item.imageLabel || 'Foto Produk' });
+      // Do not show a generated placeholder as if it were an actual product photo.
+      if (!images.length && item.image && !/placehold\.co/i.test(String(item.image))) images.push({ src: item.image, label: item.imageLabel || 'Foto Produk' });
       if (!images.length) {
         showToast('Barang ini belum memiliki foto produk.', 'error');
         return;
@@ -6011,7 +6060,7 @@
       const item = products.find(p => p.sku === sku);
       if (!item) return;
 
-      const imgSrc = item.image || 'https://placehold.co/100x100/1e293b/94a3b8?text=BRG';
+      const imgSrc = getProductDisplayImage(item);
       const safeName = item.name.replace(/'/g, "\\'");
 
       setElementText('modal-card-sku', item.sku);
