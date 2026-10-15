@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- KARTU STOCK build: v1.4.2-sku-barcode-consistency; APP_VERSION intentionally unchanged. -->
+<!-- KARTU STOCK build: v1.4.3-request-date-select; APP_VERSION intentionally unchanged. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
@@ -1044,6 +1044,12 @@
             <p class="text-xs text-slate-400 mb-5">Ajukan pengambilan barang gudang dengan memilih barang dan jumlah yang dibutuhkan.</p>
 
             <form id="form-request" onsubmit="handleRequestSubmit(event)" class="space-y-4" novalidate>
+              <div>
+                <label for="request-date" class="text-xs font-bold text-slate-300 block mb-1">Tanggal Pengajuan *</label>
+                <input type="date" id="request-date" name="request_date" required class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+                <p class="text-[10px] text-slate-500 mt-1">Tanggal ini digunakan pada persetujuan, laporan, Excel, dan formulir cetak. Waktu pencatatan sistem tetap disimpan terpisah.</p>
+                <span class="error-text hidden" id="err-req-date">Tanggal pengajuan wajib diisi dengan tanggal yang valid.</span>
+              </div>
               <div>
                 <label class="text-xs font-bold text-slate-300 block mb-1">Nama / Kode Barang *</label>
                 <input type="text" id="request-product-input" list="datalist-products" placeholder="Ketik nama atau SKU barang..." required class="w-full px-3 py-2 text-xs bg-slate-950 text-white border border-slate-800 rounded-xl focus:ring-2 focus:ring-orange-400 focus:outline-none" />
@@ -2698,10 +2704,48 @@
       };
     }
 
+    // Date-only helpers intentionally use the browser's local calendar date,
+    // avoiding UTC date shifts when the selected day is saved or reloaded.
+    function getLocalDateInputValue(value = new Date()) {
+      const dateObj = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(dateObj.getTime())) return '';
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function isValidDateOnly(value) {
+      const str = String(value || '').trim();
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+      if (!match) return false;
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      const day = Number(match[3]);
+      const dateObj = new Date(year, month - 1, day);
+      return dateObj.getFullYear() === year && dateObj.getMonth() === month - 1 && dateObj.getDate() === day;
+    }
+
+    function formatRequestDateDisplay(value) {
+      const str = String(value || '').trim();
+      if (isValidDateOnly(str)) {
+        const [year, month, day] = str.split('-');
+        return `${day}/${month}/${year}`;
+      }
+      // Compatibility for older requests whose date only exists as a timestamp.
+      return formatLocalDateTime(value);
+    }
+
     function normalizeRequestData(r) {
+      const requestedDate = String(r.request_date || r.requestDate || '').trim();
+      const validRequestedDate = isValidDateOnly(requestedDate) ? requestedDate : '';
+      const legacyDate = r.date ? formatLocalDateTime(r.date) : formatLocalDateTime(r.created_at);
       return {
-        id: r.id, date: r.date ? formatLocalDateTime(r.date) : formatLocalDateTime(r.created_at),
-        sku: r.sku, productName: r.product_name, origin: r.origin, qty: r.qty,
+        id: r.id,
+        requestDate: validRequestedDate,
+        date: validRequestedDate ? formatRequestDateDisplay(validRequestedDate) : legacyDate,
+        createdAt: r.created_at || '',
+        sku: r.sku, productName: r.product_name || r.productName, origin: r.origin, qty: r.qty,
         requester: r.requester, dept: r.dept, note: r.note, status: r.status,
         reject_reason: r.reject_reason || ''
       };
@@ -4722,12 +4766,18 @@
       
       try {
         const input = document.getElementById('request-product-input').value.trim();
-        const qty = parseInt(document.getElementById('request-qty').value);
+        const requestDateInput = document.getElementById('request-date');
+        const requestDate = String(requestDateInput?.value || '').trim();
+        const qty = parseInt(document.getElementById('request-qty').value, 10);
         const requester = document.getElementById('request-requester').value.trim();
         const dept = document.getElementById('request-dept').value.trim();
         const note = document.getElementById('request-note').value.trim();
 
         let isValid = true;
+        if (!isValidDateOnly(requestDate)) {
+          setFieldError('request-date', 'err-req-date', true);
+          isValid = false;
+        }
         if (!input) {
           setFieldError('request-product-input', 'err-req-product', true);
           isValid = false;
@@ -4758,7 +4808,10 @@
 
         const newReq = {
           id: 'REQ-' + Date.now().toString().slice(-6),
-          date: getCurrentTimeStr(),
+          // Requested business date is separate from the actual system timestamp.
+          requestDate,
+          date: formatRequestDateDisplay(requestDate),
+          createdAt: new Date().toISOString(),
           sku: target ? target.sku : 'MANUAL',
           productName: target ? target.name : input,
           origin: target ? target.origin : 'lokal',
@@ -4776,7 +4829,8 @@
             id: newReq.id, sku: newReq.sku, product_name: newReq.productName,
             origin: newReq.origin, qty: newReq.qty, requester: newReq.requester,
             dept: newReq.dept, note: newReq.note, status: 'pending',
-            created_at: new Date().toISOString()
+            request_date: newReq.requestDate,
+            created_at: newReq.createdAt
           }).catch(err => console.warn(err));
         }
 
@@ -4784,6 +4838,8 @@
         document.getElementById('form-request').reset();
         document.getElementById('request-product-input').value = '';
         document.getElementById('request-qty').value = '';
+        // Restore today's local date after form reset; defaultValue is set at startup too.
+        if (requestDateInput) requestDateInput.value = getLocalDateInputValue();
         document.getElementById('request-requester').value = '';
         document.getElementById('request-dept').value = '';
         document.getElementById('request-note').value = '';
@@ -6374,6 +6430,12 @@
 
     document.addEventListener('DOMContentLoaded', async function() {
       applyMobileDeviceMode();
+      const requestDateInput = document.getElementById('request-date');
+      if (requestDateInput) {
+        const todayLocal = getLocalDateInputValue();
+        requestDateInput.value = todayLocal;
+        requestDateInput.defaultValue = todayLocal;
+      }
       setRole('user');
 
       try {
