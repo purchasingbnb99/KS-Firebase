@@ -775,6 +775,12 @@
           </button>
 
           <div class="admin-only role-hidden">
+            <button onclick="switchTab('photo-audit')" id="nav-photo-audit" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-slate-400 hover:bg-slate-800 hover:text-white">
+              <span class="flex items-center gap-2.5"><i class="fa-solid fa-images text-sm text-cyan-400"></i> Audit Foto & Migrasi</span>
+            </button>
+          </div>
+
+          <div class="admin-only role-hidden">
             <button onclick="switchTab('approval')" id="nav-approval" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-slate-400 hover:bg-slate-800 hover:text-white">
               <span class="flex items-center gap-2.5"><i class="fa-solid fa-file-circle-check text-sm text-indigo-400"></i> Approval Request</span>
               <span id="badge-pending-approval" class="hidden bg-amber-400 text-slate-950 font-extrabold px-1.5 py-0.5 rounded-full text-[9px] animate-pulse">0</span>
@@ -1377,6 +1383,52 @@
               </thead>
               <tbody id="report-pengajuan-tbody" class="divide-y divide-slate-800 print:divide-slate-200"></tbody>
             </table>
+          </div>
+        </section>
+
+        <!-- R2 Migration Foundation: read-only Photo Manifest Audit -->
+        <section id="tab-photo-audit-view" class="tab-view hidden space-y-4">
+          <div class="bg-slate-900 rounded-2xl shadow-sm border border-slate-800 p-5 space-y-4">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div>
+                <h3 class="font-bold text-white text-base"><i class="fa-solid fa-images text-cyan-400 mr-2"></i>Audit Foto & Manifest Migrasi</h3>
+                <p class="text-xs text-slate-400 mt-1">Tahap 1 migrasi Google Drive ke Cloudflare R2 — audit referensi foto tanpa memindahkan atau menghapus file.</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" onclick="runPhotoMigrationAudit()" id="btn-photo-audit-refresh" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition"><i class="fa-solid fa-rotate mr-1"></i> Audit Ulang</button>
+                <button type="button" onclick="downloadPhotoMigrationManifest('json')" id="btn-photo-audit-json" class="bg-sky-600 hover:bg-sky-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition"><i class="fa-solid fa-file-code mr-1"></i> Unduh JSON</button>
+                <button type="button" onclick="downloadPhotoMigrationManifest('csv')" id="btn-photo-audit-csv" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-xs font-bold transition"><i class="fa-solid fa-file-csv mr-1"></i> Unduh CSV</button>
+              </div>
+            </div>
+            <div class="rounded-xl border border-amber-700/50 bg-amber-950/30 p-3 text-xs text-amber-200 space-y-1">
+              <p class="font-bold"><i class="fa-solid fa-shield-halved mr-1"></i> Mode hanya-baca (READ ONLY)</p>
+              <p>Audit ini hanya membaca data produk yang sudah dimuat ke aplikasi. Tidak mengakses file Google Drive, tidak mengunggah ke R2, tidak mengubah Firestore, dan tidak menghapus foto. Pastikan tombol Sync Data Cloud sudah berhasil sebelum membuat manifest.</p>
+              <p class="text-amber-300/80">Ukuran file dan checksum belum diperiksa pada tahap ini. Data tersebut akan dikumpulkan pada tahap verifikasi file ketika akses Drive dan bucket R2 sudah siap.</p>
+            </div>
+            <p id="photo-audit-status" class="text-xs text-slate-400" aria-live="polite">Audit belum dijalankan.</p>
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">Total Produk</p><p id="photo-audit-products" class="text-xl font-black text-white">—</p></div>
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">Referensi Foto</p><p id="photo-audit-references" class="text-xl font-black text-white">—</p></div>
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">File Drive Unik</p><p id="photo-audit-drive" class="text-xl font-black text-sky-300">—</p></div>
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">Rujukan Duplikat</p><p id="photo-audit-duplicates" class="text-xl font-black text-amber-300">—</p></div>
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">Placeholder</p><p id="photo-audit-placeholders" class="text-xl font-black text-slate-300">—</p></div>
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">Perlu Ditinjau</p><p id="photo-audit-review" class="text-xl font-black text-rose-300">—</p></div>
+            </div>
+          </div>
+
+          <div class="bg-slate-900 rounded-2xl shadow-sm border border-slate-800 overflow-hidden">
+            <div class="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div><h4 class="font-bold text-white text-sm">Rincian referensi foto</h4><p class="text-[10px] text-slate-500 mt-1">Menampilkan maksimal 200 baris pertama. File JSON/CSV berisi seluruh hasil audit.</p></div>
+              <span id="photo-audit-row-count" class="text-[10px] text-slate-400">0 baris</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs text-slate-300 min-w-[850px]">
+                <thead class="bg-slate-950 font-bold uppercase text-slate-400 border-b border-slate-800">
+                  <tr><th class="p-3">SKU</th><th class="p-3">Nama Barang</th><th class="p-3">Jenis Foto</th><th class="p-3">Label</th><th class="p-3">Sumber</th><th class="p-3">ID File Drive</th><th class="p-3">Status Audit</th></tr>
+                </thead>
+                <tbody id="photo-audit-tbody" class="divide-y divide-slate-800"><tr><td colspan="7" class="p-5 text-center text-slate-500">Jalankan audit untuk melihat manifest foto.</td></tr></tbody>
+              </table>
+            </div>
           </div>
         </section>
 
@@ -2006,6 +2058,7 @@
   </div>
 
   <script>
+    // KARTU STOCK build: 2026-11-14-r2-migration-audit-v1 (read-only manifest stage)
     const ADMIN_PIN_SECRET = "bnbzipper";
 
     const firebaseConfig = {
@@ -2080,6 +2133,7 @@
     const productSubmitInFlight = { add: false, edit: false };
     let productGalleryImages = [];
     let productGalleryIndex = 0;
+    let photoMigrationManifest = null;
     let drivePhotoIntegrationConfig = null;
     let drivePhotoIntegrationConfigPromise = null;
     let drivePhotoModeEnabled = false;
@@ -2774,6 +2828,217 @@
       updateWarehouseDropdowns();
     }
 
+    function classifyPhotoMigrationSource(source) {
+      const value = String(source || '').trim();
+      if (!value) return 'missing';
+      if (/^data:image\//i.test(value)) return 'embedded_data_url';
+      if (isPlaceholderImage(value)) return 'placeholder';
+      if (extractDrivePhotoId(value)) return 'google_drive';
+      try {
+        const parsed = new URL(value, window.location.origin);
+        if (parsed.origin === window.location.origin && parsed.pathname.replace(/\/+$/, '') === '/api/photos' && parsed.searchParams.get('id')) return 'r2_reference';
+        if (/drive\.google\.com$/i.test(parsed.hostname) || /googleusercontent\.com$/i.test(parsed.hostname)) return 'external_google_url';
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return 'external_url';
+        if (value.startsWith('/')) return 'app_relative_unknown';
+      } catch (_) {}
+      return 'unknown';
+    }
+
+    function buildPhotoMigrationManifest(productList) {
+      const sourceProducts = Array.isArray(productList) ? productList : [];
+      const entries = [];
+      const driveReferences = new Map();
+      const productsWithPhotos = new Set();
+      let placeholderCount = 0;
+      let reviewCount = 0;
+
+      const addEntry = (product, photoType, source, label) => {
+        const src = String(source || '').trim();
+        const provider = classifyPhotoMigrationSource(src);
+        const driveFileId = provider === 'google_drive' ? extractDrivePhotoId(src) : '';
+        const isRealPhoto = !['missing', 'placeholder'].includes(provider);
+        if (isRealPhoto) productsWithPhotos.add(String(product?.id || ''));
+        if (provider === 'placeholder' || provider === 'missing') placeholderCount++;
+        if (['external_google_url', 'external_url', 'embedded_data_url', 'app_relative_unknown', 'unknown'].includes(provider)) reviewCount++;
+        if (driveFileId) driveReferences.set(driveFileId, (driveReferences.get(driveFileId) || 0) + 1);
+
+        const status = provider === 'google_drive' ? 'pending_migration' :
+          provider === 'r2_reference' ? 'already_r2_reference' :
+          provider === 'placeholder' || provider === 'missing' ? 'no_real_photo' : 'review_required';
+
+        entries.push({
+          product_id: String(product?.id || ''),
+          sku: String(product?.sku || '').trim().toUpperCase(),
+          product_name: String(product?.name || ''),
+          origin: String(product?.origin || ''),
+          photo_type: photoType,
+          photo_label: String(label || ''),
+          source_provider: provider,
+          drive_file_id: driveFileId,
+          object_key: '',
+          status,
+          source_url_exported: false
+        });
+      };
+
+      sourceProducts.forEach(product => {
+        if (!product || typeof product !== 'object') return;
+        const mainSrc = String(product.image || '').trim();
+        addEntry(product, 'main', mainSrc, product.imageLabel || product.image_label || 'Foto Utama');
+        const gallery = Array.isArray(product.imageGallery) ? product.imageGallery : (Array.isArray(product.image_gallery) ? product.image_gallery : []);
+        gallery.forEach((photo, index) => {
+          const src = typeof photo === 'string' ? photo : String(photo?.src || photo?.url || '').trim();
+          const label = typeof photo === 'string' ? `Foto ${index + 2}` : (photo?.label || `Foto ${index + 2}`);
+          addEntry(product, `gallery_${index + 1}`, src, label);
+        });
+      });
+
+      const duplicateDriveReferences = Array.from(driveReferences.values()).reduce((sum, count) => sum + Math.max(0, count - 1), 0);
+      const driveUniqueCount = driveReferences.size;
+      const realPhotoReferences = entries.filter(entry => !['placeholder', 'missing'].includes(entry.source_provider)).length;
+      const generatedAt = new Date().toISOString();
+      return {
+        manifest_version: 1,
+        build: 'kartu-stock-v1.5.0-r2-migration-audit',
+        generated_at: generatedAt,
+        audit_mode: 'read_only_reference_inventory',
+        source_dataset: 'products currently loaded in KARTU STOCK application memory; sync cloud before export',
+        limitations: [
+          'This manifest inventories Firestore photo references only; it does not download or verify source objects.',
+          'Object byte size and SHA-256 are not available until the source file audit phase.',
+          'No Firestore document, Google Drive file, or R2 object is modified by this audit.',
+          'Original source URLs and query strings are intentionally excluded; Drive file IDs are included for migration mapping.'
+        ],
+        summary: {
+          total_products: sourceProducts.length,
+          products_with_real_photos: productsWithPhotos.size,
+          total_photo_references: entries.length,
+          real_photo_references: realPhotoReferences,
+          unique_google_drive_files: driveUniqueCount,
+          duplicate_google_drive_references: duplicateDriveReferences,
+          placeholder_or_missing_references: placeholderCount,
+          review_required_references: reviewCount,
+          r2_references_already_present: entries.filter(entry => entry.source_provider === 'r2_reference').length
+        },
+        entries
+      };
+    }
+
+    function renderPhotoMigrationAudit(manifest) {
+      if (!manifest) return;
+      const summary = manifest.summary || {};
+      setElementText('photo-audit-products', Number(summary.total_products || 0).toLocaleString('id-ID'));
+      setElementText('photo-audit-references', Number(summary.total_photo_references || 0).toLocaleString('id-ID'));
+      setElementText('photo-audit-drive', Number(summary.unique_google_drive_files || 0).toLocaleString('id-ID'));
+      setElementText('photo-audit-duplicates', Number(summary.duplicate_google_drive_references || 0).toLocaleString('id-ID'));
+      setElementText('photo-audit-placeholders', Number(summary.placeholder_or_missing_references || 0).toLocaleString('id-ID'));
+      setElementText('photo-audit-review', Number(summary.review_required_references || 0).toLocaleString('id-ID'));
+      setElementText('photo-audit-row-count', `${manifest.entries.length.toLocaleString('id-ID')} baris`);
+      setElementText('photo-audit-status', `Audit selesai: ${new Date(manifest.generated_at).toLocaleString('id-ID')} · Mode hanya-baca · ${manifest.source_dataset}`);
+
+      const providerLabels = {
+        google_drive: 'Google Drive', r2_reference: 'R2', placeholder: 'Placeholder', missing: 'Kosong',
+        embedded_data_url: 'Data URL', external_url: 'URL Eksternal', external_google_url: 'URL Google',
+        app_relative_unknown: 'Path Lokal', unknown: 'Tidak Dikenali'
+      };
+      const statusLabels = {
+        pending_migration: 'Menunggu migrasi', already_r2_reference: 'Referensi R2', no_real_photo: 'Bukan foto asli', review_required: 'Perlu ditinjau'
+      };
+      const rows = manifest.entries.slice(0, 200).map(entry => {
+        const provider = providerLabels[entry.source_provider] || entry.source_provider;
+        const status = statusLabels[entry.status] || entry.status;
+        const badgeClass = entry.status === 'pending_migration' ? 'bg-sky-950 text-sky-300 border-sky-800' :
+          entry.status === 'no_real_photo' ? 'bg-slate-800 text-slate-300 border-slate-700' :
+          entry.status === 'already_r2_reference' ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-amber-950 text-amber-300 border-amber-800';
+        return `<tr>
+          <td class="p-3 font-mono font-bold text-white">${escapeHtmlAttribute(entry.sku || '-')}</td>
+          <td class="p-3">${escapeHtmlAttribute(entry.product_name || '-')}</td>
+          <td class="p-3">${escapeHtmlAttribute(entry.photo_type || '-')}</td>
+          <td class="p-3">${escapeHtmlAttribute(entry.photo_label || '-')}</td>
+          <td class="p-3">${escapeHtmlAttribute(provider)}</td>
+          <td class="p-3 font-mono text-[10px]">${escapeHtmlAttribute(entry.drive_file_id || '-')}</td>
+          <td class="p-3"><span class="inline-flex px-2 py-1 rounded-md border text-[10px] ${badgeClass}">${escapeHtmlAttribute(status)}</span></td>
+        </tr>`;
+      }).join('');
+      setElementHTML('photo-audit-tbody', rows || '<tr><td colspan="7" class="p-5 text-center text-slate-500">Belum ada referensi foto produk untuk diaudit.</td></tr>');
+    }
+
+    async function runPhotoMigrationAudit() {
+      if (currentRole !== 'admin' || !isAdminAuthenticated) {
+        showToast('Audit foto hanya tersedia untuk Admin yang sudah login.', 'error');
+        return;
+      }
+      const button = document.getElementById('btn-photo-audit-refresh');
+      const original = button ? button.innerHTML : '';
+      try {
+        if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Memeriksa...'; }
+        const config = await getDrivePhotoIntegrationConfig();
+        if (config.authConfigured || config.enabled) {
+          const session = await getServerPhotoSession();
+          if (!session.authenticated || session.role !== 'admin') throw new Error('Sesi Admin server tidak aktif. Masuk ulang ke Admin.');
+        }
+        if (!Array.isArray(products) || !products.length) {
+          throw new Error('Data produk belum tersedia. Klik Sync Data Cloud sampai berhasil, lalu jalankan audit kembali.');
+        }
+        photoMigrationManifest = buildPhotoMigrationManifest(products);
+        renderPhotoMigrationAudit(photoMigrationManifest);
+        showToast('Audit referensi foto selesai. Tidak ada data yang diubah.');
+      } catch (error) {
+        setElementText('photo-audit-status', error?.message || 'Audit foto gagal dijalankan.');
+        showToast(error?.message || 'Audit foto gagal dijalankan.', 'error');
+      } finally {
+        if (button) { button.disabled = false; button.innerHTML = original; }
+      }
+    }
+
+    function csvCell(value) {
+      let text = String(value ?? '');
+      // Prevent spreadsheet formula injection in exported product names/labels.
+      if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    async function downloadPhotoMigrationManifest(format) {
+      if (currentRole !== 'admin' || !isAdminAuthenticated) {
+        showToast('Unduh manifest hanya tersedia untuk Admin.', 'error');
+        return;
+      }
+      const config = await getDrivePhotoIntegrationConfig();
+      if (config.authConfigured || config.enabled) {
+        const session = await getServerPhotoSession();
+        if (!session.authenticated || session.role !== 'admin') {
+          showToast('Sesi Admin server sudah berakhir. Masuk kembali ke Admin.', 'error');
+          return;
+        }
+      }
+      if (!photoMigrationManifest) {
+        showToast('Jalankan Audit Ulang terlebih dahulu.', 'error');
+        return;
+      }
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      let blob;
+      let fileName;
+      if (format === 'csv') {
+        const columns = ['product_id', 'sku', 'product_name', 'origin', 'photo_type', 'photo_label', 'source_provider', 'drive_file_id', 'object_key', 'status', 'source_url_exported'];
+        const lines = [columns.map(csvCell).join(','), ...photoMigrationManifest.entries.map(entry => columns.map(column => csvCell(entry[column])).join(','))];
+        blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        fileName = `kartu-stock-photo-manifest-${stamp}.csv`;
+      } else {
+        blob = new Blob([JSON.stringify(photoMigrationManifest, null, 2)], { type: 'application/json;charset=utf-8' });
+        fileName = `kartu-stock-photo-manifest-${stamp}.json`;
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+      showToast(`Manifest foto berhasil diunduh: ${format.toUpperCase()}`);
+    }
+
     function refreshCurrentView() {
       renderDashboard();
       if (currentTab === 'lokal' || currentTab === 'import') renderCatalogTable();
@@ -2782,6 +3047,7 @@
       if (currentTab === 'mutasi') renderMutasiTable();
       if (currentTab === 'report') renderReportTable();
       if (currentTab === 'report-pengajuan') renderReportPengajuanTable();
+      if (currentTab === 'photo-audit' && photoMigrationManifest) renderPhotoMigrationAudit(photoMigrationManifest);
     }
 
     function setElementText(id, text) {
@@ -2867,7 +3133,7 @@
 
     function setRole(role) {
       currentRole = role;
-      if (role === 'user') isAdminAuthenticated = false;
+      if (role === 'user') { isAdminAuthenticated = false; photoMigrationManifest = null; }
 
       const btnAdmin = document.getElementById('btn-role-admin');
       const btnUser = document.getElementById('btn-role-user');
@@ -2893,7 +3159,7 @@
           badgeStatus.className = "text-[9px] font-bold text-amber-300 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-500/30";
         }
         adminElements.forEach(el => el.classList.add('role-hidden'));
-        if (['inbound', 'approval', 'adjustment', 'transfer'].includes(currentTab)) {
+        if (['inbound', 'approval', 'adjustment', 'transfer', 'photo-audit'].includes(currentTab)) {
           switchTab('dashboard');
         }
       }
@@ -2903,7 +3169,7 @@
 
     function switchTab(tabId) {
       closeMobileSidebar();
-      const adminTabs = ['inbound', 'approval', 'adjustment', 'transfer'];
+      const adminTabs = ['inbound', 'approval', 'adjustment', 'transfer', 'photo-audit'];
       if (adminTabs.includes(tabId) && currentRole !== 'admin') {
         showToast('Akses Ditolak: Fitur ini khusus Admin!', 'error');
         switchTab('dashboard');
@@ -2934,7 +3200,8 @@
         transfer: '🏢 Kelola Master & Transfer Gudang',
         mutasi: '📋 Ledger Histori Mutasi',
         report: '🖨️ Pusat Cetak Laporan Perusahaan',
-        'report-pengajuan': '<i class="fa-solid fa-file-lines text-amber-400"></i> Laporan Pengajuan Barang'
+        'report-pengajuan': '<i class="fa-solid fa-file-lines text-amber-400"></i> Laporan Pengajuan Barang',
+        'photo-audit': '<i class="fa-solid fa-images text-cyan-400"></i> Audit Foto & Migrasi R2'
       };
       setElementHTML('page-title', titles[tabId] || 'KARTU STOCK');
 
@@ -2948,6 +3215,7 @@
       }
 
       refreshCurrentView();
+      if (tabId === 'photo-audit') runPhotoMigrationAudit();
     }
 
     function toggleSelectAllLowStock(masterCheckbox) {
