@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- KARTU STOCK build: v1.4.4-date-icon-contrast; APP_VERSION intentionally unchanged. -->
+<!-- KARTU STOCK build: v1.5.2-google-drive-photo-performance; APP_VERSION intentionally unchanged. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-10-11-staff-no-pin-v1" />
+  <meta name="app-build" content="2026-11-14-google-drive-photo-performance-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -2058,7 +2058,7 @@
   </div>
 
   <script>
-    // KARTU STOCK build: 2026-11-14-r2-migration-audit-v1 (read-only manifest stage)
+    // KARTU STOCK build: 2026-11-14-google-drive-photo-performance-v1 (private revalidation cache + lazy thumbnails)
     const ADMIN_PIN_SECRET = "bnbzipper";
 
     const firebaseConfig = {
@@ -3373,7 +3373,7 @@
             ? existingReorderQty
             : defaultEstQty;
 
-          let imageHTML = `<img src="${imgSrc}" onerror="this.src='https://placehold.co/100x100/1e293b/94a3b8?text=BRG'" onclick="showProductGalleryBySku(this.dataset.sku)" data-sku="${escapeHtmlAttribute(p.sku)}" class="w-full h-full object-cover cursor-pointer hover:scale-110 transition-transform" title="Klik untuk melihat galeri foto" alt="${escapeHtmlAttribute(p.name)}">`;
+          let imageHTML = `<img src="${imgSrc}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/100x100/1e293b/94a3b8?text=BRG'" onclick="showProductGalleryBySku(this.dataset.sku)" data-sku="${escapeHtmlAttribute(p.sku)}" class="w-full h-full object-cover cursor-pointer hover:scale-110 transition-transform" title="Klik untuk melihat galeri foto" alt="${escapeHtmlAttribute(p.name)}">`;
           
           if (!p.image || p.image === '' || p.image.includes('placehold.co')) {
              imageHTML = `<div class="w-full h-full flex items-center justify-center text-[8px] font-bold text-slate-500">BRG</div>`;
@@ -3551,7 +3551,7 @@
         <tr class="hover:bg-slate-800/50 transition">
           <td class="p-3 font-mono font-bold text-white">${p.sku}</td>
           <td class="p-3 text-center">
-            <img src="${imgSrc}" onerror="this.src='https://placehold.co/100x100/1e293b/94a3b8?text=BRG'" onclick="showProductGalleryBySku(this.dataset.sku)" data-sku="${escapeHtmlAttribute(p.sku)}" class="w-10 h-10 mx-auto rounded-xl object-cover border border-slate-800 shrink-0 shadow-sm cursor-pointer hover:scale-110 transition-transform" title="Klik untuk melihat galeri foto" alt="${escapeHtmlAttribute(p.name)}">
+            <img src="${imgSrc}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/100x100/1e293b/94a3b8?text=BRG'" onclick="showProductGalleryBySku(this.dataset.sku)" data-sku="${escapeHtmlAttribute(p.sku)}" class="w-10 h-10 mx-auto rounded-xl object-cover border border-slate-800 shrink-0 shadow-sm cursor-pointer hover:scale-110 transition-transform" title="Klik untuk melihat galeri foto" alt="${escapeHtmlAttribute(p.name)}">
           </td>
           <td class="p-3">
             <div>
@@ -4662,7 +4662,7 @@
       const countEl = document.getElementById(countId);
       const placeholder = 'https://placehold.co/100x100/1e293b/94a3b8?text=Foto';
 
-      if (previewEl) previewEl.src = photos[0]?.src || placeholder;
+      if (previewEl) { previewEl.loading = 'eager'; previewEl.decoding = 'async'; previewEl.src = photos[0]?.src || placeholder; }
       if (countEl) countEl.innerText = `${photos.length} dari ${MAX_PRODUCT_PHOTOS} foto${photos.length ? ' • Foto pertama menjadi foto utama' : ''}`;
       if (!galleryEl) return;
 
@@ -4883,7 +4883,7 @@
       const thumbnailsEl = document.getElementById('preview-gallery-thumbnails');
       const previousEl = document.getElementById('preview-gallery-prev');
       const nextEl = document.getElementById('preview-gallery-next');
-      if (imgEl) { imgEl.src = current.src; imgEl.alt = current.label || 'Foto Produk'; } 
+      if (imgEl) { imgEl.loading = 'eager'; imgEl.decoding = 'async'; imgEl.src = current.src; imgEl.alt = current.label || 'Foto Produk'; } 
       if (captionEl) captionEl.innerText = current.label || 'Foto Produk';
       if (counterEl) counterEl.innerText = `${productGalleryIndex + 1} / ${images.length}`;
       [previousEl, nextEl].forEach(button => { if (button) button.classList.toggle('hidden', images.length <= 1); });
@@ -4891,7 +4891,7 @@
         thumbnailsEl.classList.toggle('hidden', images.length <= 1);
         thumbnailsEl.innerHTML = images.map((photo, index) => `
           <button type="button" onclick="setProductGalleryIndex(${index})" aria-label="Lihat ${escapeHtmlAttribute(photo.label)}" class="rounded-lg border ${index === productGalleryIndex ? 'border-orange-400 ring-1 ring-orange-400' : 'border-slate-700'} bg-slate-900 p-1 overflow-hidden">
-            <img src="${escapeHtmlAttribute(photo.src)}" alt="${escapeHtmlAttribute(photo.label)}" loading="lazy" class="w-full h-14 sm:h-16 object-contain rounded" />
+            <img src="${escapeHtmlAttribute(photo.src)}" alt="${escapeHtmlAttribute(photo.label)}" loading="lazy" decoding="async" class="w-full h-14 sm:h-16 object-contain rounded" />
             <span class="block truncate px-1 py-1 text-[9px] ${index === productGalleryIndex ? 'text-orange-300' : 'text-slate-400'}">${escapeHtmlAttribute(photo.label || `Foto ${index + 1}`)}</span>
           </button>`).join('');
       }
