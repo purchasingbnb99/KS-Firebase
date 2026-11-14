@@ -1,5 +1,30 @@
+import crypto from 'node:crypto';
 import driveService from '../_lib/drive-service.mjs';
-const { MAX_PHOTO_BYTES, isDriveConfigured, readSession, originMatchesRequest, sendJson, bodyObject, getDriveAccessToken, uploadDrivePhoto, readDrivePhoto, deleteDrivePhoto } = driveService;
+const { MAX_PHOTO_BYTES, isDriveConfigured, readSession, originMatchesRequest, sendJson, bodyObject,
+  getDriveAccessToken, uploadDrivePhoto, getDrivePhotoMetadata, readDrivePhoto, deleteDrivePhoto } = driveService;
+
+function photoEtag(file) {
+  const identity = [file.id, file.md5Checksum || '', file.modifiedTime || '', file.size || '', file.mimeType || ''].join('|');
+  return `"${crypto.createHash('sha256').update(identity).digest('hex')}"`;
+}
+function ifNoneMatchMatches(header, etag) {
+  return String(header || '').split(',').some(value => {
+    const candidate = value.trim();
+    return candidate === '*' || candidate === etag || candidate.replace(/^W\//, '') === etag;
+  });
+}
+function setPrivatePhotoCacheHeaders(res, etag, modifiedTime) {
+  // Browser may retain the bytes, but must revalidate through this authenticated
+  // endpoint before reuse. CDN/shared caches are explicitly disabled.
+  res.setHeader('Cache-Control', 'private, no-cache, max-age=0, must-revalidate');
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Vary', 'Cookie');
+  res.setHeader('ETag', etag);
+  if (modifiedTime) {
+    const timestamp = Date.parse(modifiedTime);
+    if (Number.isFinite(timestamp)) res.setHeader('Last-Modified', new Date(timestamp).toUTCString());
+  }
+}
 
 export default async function handler(req, res) {
   if (!isDriveConfigured()) return sendJson(res, 503, { error: 'Google Drive belum dikonfigurasi. Mode penyimpanan lama tetap digunakan.' });
@@ -9,16 +34,27 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const fileId = String(req.query?.id || '');
     if (!fileId) return sendJson(res, 400, { error: 'FILE_ID_REQUIRED' });
+    if (!/^[a-zA-Z0-9_-]{10,200}$/.test(fileId)) return sendJson(res, 400, { error: 'INVALID_FILE_ID' });
     try {
       const accessToken = await getDriveAccessToken();
-      const result = await readDrivePhoto(accessToken, fileId);
+      // Always authenticate and re-check that the requested image is still inside
+      // the private product folder before accepting a conditional cache hit.
+      const file = await getDrivePhotoMetadata(accessToken, fileId);
+      if (!file) return sendJson(res, 404, { error: 'PHOTO_NOT_FOUND' });
+      const etag = photoEtag(file);
+      setPrivatePhotoCacheHeaders(res, etag, file.modifiedTime);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+      if (ifNoneMatchMatches(req.headers?.['if-none-match'], etag)) {
+        res.statusCode = 304;
+        return res.end();
+      }
+
+      const result = await readDrivePhoto(accessToken, fileId, file);
       if (!result) return sendJson(res, 404, { error: 'PHOTO_NOT_FOUND' });
       res.statusCode = 200;
       res.setHeader('Content-Type', result.file.mimeType || 'image/jpeg');
       res.setHeader('Content-Length', String(result.bytes.length));
-      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
       return res.end(result.bytes);
     } catch (error) {
       console.error('Drive photo read failed:', error.message || 'UNKNOWN');
