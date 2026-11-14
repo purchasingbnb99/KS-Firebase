@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="index,follow">
+  <title>Kebijakan Privasi — KARTU STOCK</title>
+  <style>
+    :root{color-scheme:light;--ink:#172033;--muted:#5b6577;--line:#e5e9f0;--brand:#2563eb;--bg:#f6f8fc}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    header{background:#101a30;color:#fff;padding:26px 20px}header .wrap,main,.foot{max-width:900px;margin:auto}
+    .brand{font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:#b9c7e4;font-weight:700}.title{font-size:clamp(28px,5vw,40px);line-height:1.2;margin:8px 0}.updated{color:#c5d1e8;font-size:14px}
+    main{background:#fff;margin:28px auto;padding:clamp(22px,5vw,44px);border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 28px #0b17300b}
+    h2{font-size:21px;line-height:1.35;margin:30px 0 8px}p,li{color:#354156}a{color:var(--brand);overflow-wrap:anywhere}.notice{background:#eff6ff;border-left:4px solid var(--brand);padding:14px 16px;border-radius:8px;color:#203b69}
+    footer{padding:0 20px 32px;color:var(--muted);font-size:14px;text-align:center}.links{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+  </style>
+</head>
+<body>
+  <header><div class="wrap"><div class="brand">KARTU STOCK</div><h1 class="title">Kebijakan Privasi</h1><div class="updated">Berlaku efektif: 15 November 2026 · Versi 1.0</div></div></header>
+  <main>
+    <p class="notice"><strong>Ringkasan:</strong> KARTU STOCK adalah aplikasi pengelolaan inventaris dan stok. Aplikasi menggunakan Google Drive untuk menyimpan dan menampilkan foto produk yang dikelola melalui aplikasi, serta Firebase/Cloud Firestore untuk data inventaris dan referensi foto.</p>
+
+    <h2>1. Pengelola dan kontak</h2>
+    <p>Kebijakan ini berlaku untuk aplikasi KARTU STOCK yang dioperasikan oleh Pengelola KARTU STOCK (Purchasing BNB) melalui domain <strong>ks.purchasing.my.id</strong>. Untuk pertanyaan, permintaan akses, koreksi, atau penghapusan data, hubungi <a href="mailto:purchasing.bnb99@gmail.com">purchasing.bnb99@gmail.com</a>.</p>
+
+    <h2>2. Informasi yang diproses</h2>
+    <p>Sesuai fitur yang digunakan, KARTU STOCK dapat memproses:</p>
+    <ul>
+      <li><strong>Data inventaris:</strong> SKU/kode barang, barcode, nama dan kategori barang, lokasi gudang, jumlah stok, harga, informasi pemasok, serta catatan operasional yang dimasukkan pengguna.</li>
+      <li><strong>Foto produk:</strong> foto utama dan foto galeri yang diunggah untuk mendukung identifikasi barang.</li>
+      <li><strong>Data teknis sesi:</strong> informasi sesi dan cookie yang diperlukan untuk menjalankan fungsi aplikasi dan memeriksa hak akses Staff/Admin.</li>
+      <li><strong>Data Google Drive:</strong> berkas foto produk dan metadata berkas yang diperlukan aplikasi untuk menemukan, menampilkan, memperbarui, atau mengelola foto yang dibuat atau digunakan melalui fitur KARTU STOCK.</li>
+    </ul>
+
+    <h2>3. Cara KARTU STOCK menggunakan Google user data</h2>
+    <p>Jika pengelola menghubungkan akun Google ke KARTU STOCK, aplikasi meminta izin Google Drive dengan scope <code>https://www.googleapis.com/auth/drive.file</code>. Izin ini digunakan untuk operasi file Drive yang dibuat atau dibuka melalui aplikasi, bukan untuk membaca seluruh isi Google Drive pengguna.</p>
+    <p>Secara khusus, akses Google Drive digunakan untuk:</p>
+    <ul>
+      <li>mengunggah foto produk yang dipilih pengguna ke folder khusus <strong>KARTU STOCK Foto Produk</strong>;</li>
+      <li>membaca metadata dan isi foto yang diperlukan untuk menampilkan foto pada katalog dan galeri produk;</li>
+      <li>mengelola file foto produk yang dibuat atau dikelola melalui fitur aplikasi, sesuai tindakan yang diminta pengguna berwenang.</li>
+    </ul>
+    <p>KARTU STOCK tidak menggunakan Google user data untuk iklan, penargetan iklan, penjualan data, atau tujuan lain di luar penyediaan dan pemeliharaan fitur inventaris yang dijelaskan di atas. Data Google tidak dijual atau diberikan kepada pihak ketiga untuk tujuan mereka sendiri. Penggunaan dan transfer data Google dibatasi sesuai Google API Services User Data Policy dan persyaratan Limited Use.</p>
+
+    <h2>4. Penyimpanan dan penyedia layanan</h2>
+    <ul>
+      <li><strong>Google Drive:</strong> menyimpan foto produk. Folder dan file foto dikelola sebagai file privat; aplikasi tidak meminta pengguna menjadikan foto tersedia untuk publik.</li>
+      <li><strong>Firebase / Cloud Firestore:</strong> menyimpan data inventaris dan referensi/metadata yang diperlukan untuk menghubungkan catatan barang dengan foto.</li>
+      <li><strong>Vercel:</strong> meng-host aplikasi dan menjalankan API server yang diperlukan untuk menghubungkan aplikasi dengan layanan penyimpanan. Kredensial OAuth yang diperlukan untuk akses server disimpan sebagai konfigurasi rahasia server, bukan ditampilkan kepada browser.</li>
+    </ul>
+    <p>Penyedia infrastruktur tersebut memproses data sejauh diperlukan untuk menjalankan layanan terkait dan tunduk pada ketentuan serta kebijakan privasi masing-masing penyedia.</p>
+
+    <h2>5. Pembagian data</h2>
+    <p>KARTU STOCK tidak menjual data inventaris atau Google user data. Data hanya diproses oleh layanan infrastruktur yang diperlukan untuk menjalankan aplikasi, oleh pengguna yang diberi akses dalam organisasi/pengelola, atau ketika pengungkapan diwajibkan oleh hukum. Google user data tidak digunakan untuk iklan atau dipindahkan untuk tujuan yang tidak sesuai dengan fitur aplikasi.</p>
+
+    <h2>6. Pengamanan</h2>
+    <p>Aplikasi menerapkan kontrol akses berbasis peran dan sesi server untuk endpoint foto. Pembacaan foto memerlukan sesi aplikasi yang valid; fungsi pengunggahan dan penghapusan dibatasi untuk akses Admin. Kredensial OAuth disimpan pada konfigurasi server dan tidak dimasukkan ke kode halaman publik. Tidak ada metode transmisi atau penyimpanan elektronik yang dapat dijamin aman 100%, sehingga pengelola tetap melakukan perbaikan keamanan yang wajar.</p>
+
+    <h2>7. Retensi, koreksi, dan penghapusan</h2>
+    <p>Data inventaris dan foto disimpan selama masih diperlukan untuk operasional KARTU STOCK atau sesuai instruksi pengelola yang berwenang. Pengguna yang berwenang dapat meminta koreksi atau penghapusan melalui administrator KARTU STOCK atau kontak pada bagian 1. Permintaan akan ditinjau dan diproses sesuai hak akses, kebutuhan operasional, dan kewajiban hukum yang berlaku. Pencabutan izin Google dapat dilakukan melalui pengaturan keamanan Akun Google; setelah izin dicabut, fitur yang memerlukan Google Drive mungkin tidak lagi berfungsi sampai otorisasi diberikan kembali.</p>
+
+    <h2>8. Cookie dan sesi</h2>
+    <p>KARTU STOCK menggunakan cookie sesi yang diperlukan untuk mempertahankan status akses aplikasi dan mengamankan permintaan ke API privat. Cookie tersebut bukan untuk iklan. Menonaktifkan cookie dapat menyebabkan sebagian fitur, khususnya tampilan foto privat, tidak berfungsi.</p>
+
+    <h2>9. Perubahan kebijakan</h2>
+    <p>Kebijakan ini dapat diperbarui apabila fitur, cara pemrosesan data, atau persyaratan hukum berubah. Versi terbaru akan dipublikasikan pada halaman ini. Jika penggunaan Google user data berubah secara material, pengelola akan memberikan pemberitahuan dan meminta persetujuan baru jika diwajibkan.</p>
+
+    <h2>10. Kontak</h2>
+    <p>Untuk pertanyaan atau permintaan terkait privasi dan data, hubungi <a href="mailto:purchasing.bnb99@gmail.com">purchasing.bnb99@gmail.com</a>.</p>
+  </main>
+  <footer><div class="foot">© 2026 KARTU STOCK · Purchasing BNB<div class="links"><a href="/">Kembali ke KARTU STOCK</a><a href="/terms-of-service.html">Ketentuan Layanan</a></div></div></footer>
+</body>
+</html>
