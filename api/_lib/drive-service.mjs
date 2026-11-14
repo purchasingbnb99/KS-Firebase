@@ -171,7 +171,7 @@ async function getOrCreateProductFolder(accessToken) {
 }
 async function getDriveFileInProductFolder(accessToken, fileId, folderId) {
   if (!/^[a-zA-Z0-9_-]{10,200}$/.test(String(fileId || ''))) return null;
-  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,parents,size,trashed`;
+  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,parents,size,trashed,md5Checksum,modifiedTime`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error('GOOGLE_DRIVE_METADATA_FAILED');
@@ -195,13 +195,24 @@ async function uploadDrivePhoto(accessToken, fileName, mimeType, bytes) {
   if (!file.id) throw new Error('GOOGLE_DRIVE_UPLOAD_FAILED');
   return { ...file, folderId: folder.id };
 }
-async function readDrivePhoto(accessToken, fileId) {
+async function getDrivePhotoMetadata(accessToken, fileId) {
   const folder = await getOrCreateProductFolder(accessToken);
-  const file = await getDriveFileInProductFolder(accessToken, fileId, folder.id);
+  return getDriveFileInProductFolder(accessToken, fileId, folder.id);
+}
+async function readDrivePhoto(accessToken, fileId, verifiedFile = null) {
+  // Reuse metadata already validated by the API handler so one read does not
+  // issue a duplicate Drive metadata request.
+  const file = verifiedFile || await getDrivePhotoMetadata(accessToken, fileId);
   if (!file) return null;
   const response = await driveApi(accessToken, `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (!bytes.length || bytes.length > MAX_PHOTO_BYTES) return null;
+  if (file.md5Checksum) {
+    const actualMd5 = crypto.createHash('md5').update(bytes).digest('hex');
+    if (actualMd5 !== String(file.md5Checksum).toLowerCase()) {
+      throw new Error('DRIVE_PHOTO_CHANGED_DURING_READ');
+    }
+  }
   return { file, bytes };
 }
 async function deleteDrivePhoto(accessToken, fileId) {
@@ -230,5 +241,5 @@ export default {
   env, isAuthConfigured, isDriveConfigured, safeEqual, encodeState, verifySignedState,
   signSession, readSession, setSessionCookie, clearSessionCookie, originMatchesRequest,
   sendJson, bodyObject, sanitizeFileName, getDriveAccessToken, getOrCreateProductFolder,
-  uploadDrivePhoto, readDrivePhoto, deleteDrivePhoto
+  uploadDrivePhoto, getDrivePhotoMetadata, readDrivePhoto, deleteDrivePhoto
 };
