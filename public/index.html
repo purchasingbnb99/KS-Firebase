@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- KARTU STOCK build: v1.5.3-smart-photo-management; APP_VERSION intentionally unchanged. -->
+<!-- KARTU STOCK build: v1.5.4-advanced-photo-gallery-controls; APP_VERSION intentionally unchanged. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-11-15-smart-photo-management-v1" />
+  <meta name="app-build" content="2026-11-15-advanced-photo-gallery-controls-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -1695,7 +1695,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <input type="file" id="add-prod-image" accept="image/*" multiple onchange="previewProductImage(event)" class="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-orange-400 file:text-slate-950 hover:file:bg-orange-300 cursor-pointer" />
-                <span class="text-[10px] text-slate-500 block mt-1">Pilih beberapa sudut sekaligus. Maks. 20MB per foto sebelum kompresi; ukuran dioptimalkan otomatis.</span>
+                <span class="text-[10px] text-slate-500 block mt-1">Pilih beberapa sudut sekaligus. Maks. 20MB per foto sebelum kompresi; ukuran dioptimalkan otomatis. Foto pertama menjadi foto utama.</span>
                 <span id="add-prod-image-count" class="text-[10px] text-sky-300 block mt-1">0 dari 5 foto</span>
               </div>
             </div>
@@ -1814,7 +1814,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <input type="file" id="edit-prod-image" accept="image/*" multiple onchange="previewEditProductImage(event)" class="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-orange-400 file:text-slate-950 hover:file:bg-orange-300 cursor-pointer" />
-                <span class="text-[10px] text-slate-500 block mt-1">Tambah foto dari sudut lain. Maks. 20MB per foto sebelum kompresi; ukuran dioptimalkan otomatis.</span>
+                <span class="text-[10px] text-slate-500 block mt-1">Tambah foto dari sudut lain. Gunakan tombol Pratinjau, Urutkan, Jadikan Utama, atau Ganti pada tiap foto. Maks. 20MB sebelum kompresi.</span>
                 <span id="edit-prod-image-count" class="text-[10px] text-sky-300 block mt-1">0 dari 5 foto</span>
               </div>
             </div>
@@ -2096,7 +2096,7 @@
   </div>
 
   <script>
-    // KARTU STOCK build: 2026-11-15-smart-photo-management-v1 (Google Drive health audit + photo reference inventory)
+    // KARTU STOCK build: 2026-11-15-advanced-photo-gallery-controls-v1 (safe primary, reorder, preview and replace controls)
     const ADMIN_PIN_SECRET = "bnbzipper";
 
     const firebaseConfig = {
@@ -4881,16 +4881,21 @@
       }
 
       galleryEl.innerHTML = photos.map((photo, index) => `
-        <div class="min-w-0 rounded-xl border ${index === 0 ? 'border-orange-400/70 bg-orange-950/20' : 'border-slate-700 bg-slate-950'} p-2">
-          <button type="button" class="relative block w-full" onclick="setProductPrimaryImage('${kind}', ${index})" title="Klik untuk menjadikan foto utama">
-            <img src="${escapeHtmlAttribute(photo.src)}" alt="${escapeHtmlAttribute(photo.label)}" class="w-full h-24 object-contain rounded-lg bg-slate-900" loading="lazy" />
+        <div class="min-w-0 rounded-xl border ${index === 0 ? 'border-orange-400/70 bg-orange-950/20' : 'border-slate-700 bg-slate-950'} p-2" data-photo-index="${index}">
+          <button type="button" class="relative block w-full" onclick="previewProductImageFromEditor('${kind}', ${index})" title="Pratinjau foto ${index + 1}">
+            <img src="${escapeHtmlAttribute(photo.src)}" alt="${escapeHtmlAttribute(photo.label)}" class="w-full h-24 object-contain rounded-lg bg-slate-900" loading="lazy" decoding="async" />
             <span class="absolute left-1 top-1 rounded-md ${index === 0 ? 'bg-orange-400 text-slate-950' : 'bg-slate-800 text-slate-200'} px-1.5 py-0.5 text-[9px] font-bold">${index === 0 ? 'FOTO UTAMA' : `FOTO ${index + 1}`}</span>
           </button>
           <input type="text" maxlength="50" value="${escapeHtmlAttribute(photo.label)}" aria-label="Label foto ${index + 1}" onchange="setProductImageLabel('${kind}', ${index}, this.value)" class="mt-2 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[10px] text-white outline-none focus:border-orange-400" placeholder="Contoh: Tampak samping" />
-          <div class="mt-2 flex items-center gap-1">
-            <button type="button" onclick="setProductPrimaryImage('${kind}', ${index})" ${index === 0 ? 'disabled' : ''} class="flex-1 rounded-md px-2 py-1 text-[9px] font-bold ${index === 0 ? 'bg-slate-800 text-slate-500 cursor-default' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}">${index === 0 ? 'Utama' : 'Jadikan Utama'}</button>
-            <button type="button" onclick="removeProductImage('${kind}', ${index})" aria-label="Hapus foto ${index + 1}" class="rounded-md bg-rose-950 px-2 py-1 text-[10px] font-bold text-rose-300 hover:bg-rose-900"><i class="fa-solid fa-trash"></i></button>
+          <div class="mt-2 grid grid-cols-2 gap-1">
+            <button type="button" onclick="previewProductImageFromEditor('${kind}', ${index})" class="rounded-md bg-sky-950 px-2 py-1.5 text-[9px] font-bold text-sky-200 hover:bg-sky-900" title="Lihat ukuran besar"><i class="fa-solid fa-eye mr-1"></i>Pratinjau</button>
+            <button type="button" onclick="setProductPrimaryImage('${kind}', ${index})" ${index === 0 ? 'disabled' : ''} class="rounded-md px-2 py-1.5 text-[9px] font-bold ${index === 0 ? 'bg-slate-800 text-slate-500 cursor-default' : 'bg-orange-950 text-orange-200 hover:bg-orange-900'}" title="Jadikan foto utama">${index === 0 ? '<i class="fa-solid fa-star mr-1"></i>Utama' : '<i class="fa-regular fa-star mr-1"></i>Jadikan utama'}</button>
+            <button type="button" onclick="moveProductImage('${kind}', ${index}, -1)" ${index === 0 ? 'disabled' : ''} class="rounded-md bg-slate-800 px-2 py-1.5 text-[9px] font-bold text-slate-200 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed" title="Geser ke urutan sebelumnya"><i class="fa-solid fa-arrow-up mr-1"></i>Naik</button>
+            <button type="button" onclick="moveProductImage('${kind}', ${index}, 1)" ${index === photos.length - 1 ? 'disabled' : ''} class="rounded-md bg-slate-800 px-2 py-1.5 text-[9px] font-bold text-slate-200 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed" title="Geser ke urutan berikutnya"><i class="fa-solid fa-arrow-down mr-1"></i>Turun</button>
+            <button type="button" onclick="document.getElementById('replace-photo-${kind}-${index}').click()" class="rounded-md bg-emerald-950 px-2 py-1.5 text-[9px] font-bold text-emerald-200 hover:bg-emerald-900" title="Ganti file foto"><i class="fa-solid fa-image mr-1"></i>Ganti foto</button>
+            <button type="button" onclick="removeProductImage('${kind}', ${index})" aria-label="Lepas foto ${index + 1} dari galeri" class="rounded-md bg-rose-950 px-2 py-1.5 text-[9px] font-bold text-rose-300 hover:bg-rose-900" title="Lepas dari daftar produk; file Drive tidak dihapus"><i class="fa-solid fa-link-slash mr-1"></i>Lepas</button>
           </div>
+          <input id="replace-photo-${kind}-${index}" type="file" accept="image/*" class="hidden" onchange="replaceProductImage('${kind}', ${index}, event)" />
         </div>`).join('');
     }
 
@@ -4900,6 +4905,56 @@
       const selected = photos.splice(index, 1)[0];
       photos.unshift(selected);
       renderProductImageEditor(kind);
+      showToast('Foto utama diperbarui pada pratinjau. Tekan Simpan/Update Barang untuk menerapkan perubahan.');
+    }
+
+    function moveProductImage(kind, index, direction) {
+      const photos = kind === 'add' ? addProductImages : editProductImages;
+      const targetIndex = Number(index) + Number(direction);
+      if (!Array.isArray(photos) || !Number.isInteger(Number(index)) || !Number.isInteger(Number(direction)) || !photos[index] || targetIndex < 0 || targetIndex >= photos.length) return;
+      const [selected] = photos.splice(index, 1);
+      photos.splice(targetIndex, 0, selected);
+      renderProductImageEditor(kind);
+      showToast('Urutan foto diperbarui pada pratinjau. Foto pertama menjadi foto utama setelah disimpan.');
+    }
+
+    function previewProductImageFromEditor(kind, index) {
+      const photos = kind === 'add' ? addProductImages : editProductImages;
+      if (!Array.isArray(photos) || !photos[index]?.src) return;
+      productGalleryImages = photos.map(photo => ({ src: String(photo.src || ''), label: String(photo.label || 'Foto Produk') })).filter(photo => photo.src);
+      if (!productGalleryImages.length) return;
+      productGalleryIndex = Math.max(0, Math.min(Number(index) || 0, productGalleryImages.length - 1));
+      renderProductGallery();
+      openModal('modal-image-preview');
+    }
+
+    async function replaceProductImage(kind, index, event) {
+      const photos = kind === 'add' ? addProductImages : editProductImages;
+      const input = event?.target;
+      const file = input?.files?.[0];
+      if (input) input.value = '';
+      if (!file) return;
+      if (currentRole !== 'admin') { showToast('Hanya Admin yang dapat mengganti foto produk.', 'error'); return; }
+      if (!Array.isArray(photos) || !photos[index]) return;
+      const previousPhoto = { ...photos[index] };
+      try {
+        const src = await compressProductImageFile(file);
+        if (photos.some((photo, photoIndex) => photoIndex !== index && photo.src === src)) {
+          showToast('Foto yang sama sudah ada di galeri produk ini.', 'error');
+          return;
+        }
+        const candidate = photos.map((photo, photoIndex) => photoIndex === index ? { ...photo, src } : photo);
+        if (getProductImageSourceLength(candidate) > MAX_PRODUCT_IMAGE_DATA_CHARS) {
+          showToast('Total data foto terlalu besar untuk dokumen produk. Pilih foto yang lebih kecil.', 'error');
+          return;
+        }
+        photos[index] = { ...previousPhoto, src };
+        renderProductImageEditor(kind);
+        showToast('Foto pengganti siap ditinjau. File Google Drive lama tetap tersimpan; perubahan referensi berlaku setelah Simpan/Update Barang.');
+      } catch (error) {
+        console.error('Gagal mengganti foto produk:', error);
+        showToast(error?.message || 'Foto pengganti gagal diproses.', 'error');
+      }
     }
 
     function setProductImageLabel(kind, index, value) {
@@ -4914,7 +4969,7 @@
       if (!Array.isArray(photos) || index < 0 || index >= photos.length) return;
       photos.splice(index, 1);
       renderProductImageEditor(kind);
-      showToast('Foto dihapus dari daftar. Tekan Simpan/Update Barang untuk menerapkan perubahan.');
+      showToast('Foto dilepas dari daftar produk. File Google Drive tidak dihapus; tekan Simpan/Update Barang untuk menerapkan perubahan.');
     }
 
     function formatFileSize(bytes) {
