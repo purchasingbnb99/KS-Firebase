@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- KARTU STOCK build: v1.5.2-google-drive-photo-performance; APP_VERSION intentionally unchanged. -->
+<!-- KARTU STOCK build: v1.5.3-smart-photo-management; APP_VERSION intentionally unchanged. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-11-14-google-drive-photo-performance-v1" />
+  <meta name="app-build" content="2026-11-15-smart-photo-management-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -776,7 +776,7 @@
 
           <div class="admin-only role-hidden">
             <button onclick="switchTab('photo-audit')" id="nav-photo-audit" class="nav-btn w-full flex items-center justify-between px-3 py-2 rounded-xl transition text-slate-400 hover:bg-slate-800 hover:text-white">
-              <span class="flex items-center gap-2.5"><i class="fa-solid fa-images text-sm text-cyan-400"></i> Audit Foto & Migrasi</span>
+              <span class="flex items-center gap-2.5"><i class="fa-solid fa-images text-sm text-cyan-400"></i> Smart Photo Management</span>
             </button>
           </div>
 
@@ -1386,13 +1386,13 @@
           </div>
         </section>
 
-        <!-- R2 Migration Foundation: read-only Photo Manifest Audit -->
+        <!-- V1.5.3 Smart Photo Management: reference inventory + read-only Google Drive health check -->
         <section id="tab-photo-audit-view" class="tab-view hidden space-y-4">
           <div class="bg-slate-900 rounded-2xl shadow-sm border border-slate-800 p-5 space-y-4">
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
               <div>
-                <h3 class="font-bold text-white text-base"><i class="fa-solid fa-images text-cyan-400 mr-2"></i>Audit Foto & Manifest Migrasi</h3>
-                <p class="text-xs text-slate-400 mt-1">Tahap 1 migrasi Google Drive ke Cloudflare R2 — audit referensi foto tanpa memindahkan atau menghapus file.</p>
+                <h3 class="font-bold text-white text-base"><i class="fa-solid fa-images text-cyan-400 mr-2"></i>Smart Photo Management</h3>
+                <p class="text-xs text-slate-400 mt-1">Audit referensi foto, kesehatan file Google Drive, ukuran, dan checksum tanpa mengubah data produk.</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <button type="button" onclick="runPhotoMigrationAudit()" id="btn-photo-audit-refresh" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition"><i class="fa-solid fa-rotate mr-1"></i> Audit Ulang</button>
@@ -1402,8 +1402,8 @@
             </div>
             <div class="rounded-xl border border-amber-700/50 bg-amber-950/30 p-3 text-xs text-amber-200 space-y-1">
               <p class="font-bold"><i class="fa-solid fa-shield-halved mr-1"></i> Mode hanya-baca (READ ONLY)</p>
-              <p>Audit ini hanya membaca data produk yang sudah dimuat ke aplikasi. Tidak mengakses file Google Drive, tidak mengunggah ke R2, tidak mengubah Firestore, dan tidak menghapus foto. Pastikan tombol Sync Data Cloud sudah berhasil sebelum membuat manifest.</p>
-              <p class="text-amber-300/80">Ukuran file dan checksum belum diperiksa pada tahap ini. Data tersebut akan dikumpulkan pada tahap verifikasi file ketika akses Drive dan bucket R2 sudah siap.</p>
+              <p>Inventaris referensi membaca data produk yang sudah dimuat. Pemeriksaan kesehatan Drive dilakukan terpisah oleh API server khusus Admin: memeriksa metadata, membaca konten foto, dan mencocokkan MD5 jika tersedia.</p>
+              <p class="text-amber-300/80">Seluruh pemeriksaan bersifat read-only. Tidak ada upload, delete, pemindahan file, perubahan Firestore, atau koneksi R2. Jalankan Sync Data Cloud sebelum audit.</p>
             </div>
             <p id="photo-audit-status" class="text-xs text-slate-400" aria-live="polite">Audit belum dijalankan.</p>
             <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
@@ -1427,6 +1427,44 @@
                   <tr><th class="p-3">SKU</th><th class="p-3">Nama Barang</th><th class="p-3">Jenis Foto</th><th class="p-3">Label</th><th class="p-3">Sumber</th><th class="p-3">ID File Drive</th><th class="p-3">Status Audit</th></tr>
                 </thead>
                 <tbody id="photo-audit-tbody" class="divide-y divide-slate-800"><tr><td colspan="7" class="p-5 text-center text-slate-500">Jalankan audit untuk melihat manifest foto.</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bg-slate-900 rounded-2xl shadow-sm border border-slate-800 p-5 space-y-4">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div>
+                <h4 class="font-bold text-white text-sm"><i class="fa-brands fa-google-drive text-emerald-400 mr-2"></i>Kesehatan File Google Drive</h4>
+                <p class="text-[11px] text-slate-400 mt-1">Memeriksa file unik yang dirujuk katalog. Diproses bertahap, 3 file per permintaan. Konten dibaca server untuk uji keterbacaan dan MD5 bila tersedia.</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <button type="button" onclick="runDrivePhotoHealthCheck()" id="btn-drive-photo-health" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition"><i class="fa-solid fa-stethoscope mr-1"></i> Periksa Kesehatan Drive</button>
+                <button type="button" onclick="downloadPhotoHealthReport('json')" id="btn-drive-photo-health-json" class="bg-sky-700 hover:bg-sky-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition" disabled><i class="fa-solid fa-file-code mr-1"></i> JSON</button>
+                <button type="button" onclick="downloadPhotoHealthReport('csv')" id="btn-drive-photo-health-csv" class="bg-indigo-700 hover:bg-indigo-600 text-white px-3 py-2 rounded-xl text-xs font-bold transition" disabled><i class="fa-solid fa-file-csv mr-1"></i> CSV</button>
+              </div>
+            </div>
+            <p id="drive-photo-health-status" class="text-xs text-slate-400" aria-live="polite">Pemeriksaan Drive belum dijalankan.</p>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">File Diperiksa</p><p id="drive-health-total" class="text-xl font-black text-white">—</p></div>
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">Sehat & Terbaca</p><p id="drive-health-healthy" class="text-xl font-black text-emerald-300">—</p></div>
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">Perlu Perhatian</p><p id="drive-health-attention" class="text-xl font-black text-rose-300">—</p></div>
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">MD5 Terverifikasi</p><p id="drive-health-checksum" class="text-xl font-black text-sky-300">—</p></div>
+              <div class="bg-slate-950 border border-slate-800 rounded-xl p-3"><p class="text-[10px] text-slate-500">Ukuran File Sehat</p><p id="drive-health-size" class="text-xl font-black text-white">—</p></div>
+            </div>
+            <p class="text-[10px] text-slate-500">Ukuran di atas adalah total file unik yang berhasil diperiksa dan bukan pemakaian seluruh akun Google Drive.</p>
+          </div>
+
+          <div class="bg-slate-900 rounded-2xl shadow-sm border border-slate-800 overflow-hidden">
+            <div class="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div><h4 class="font-bold text-white text-sm">Rincian kesehatan file Drive</h4><p class="text-[10px] text-slate-500 mt-1">Setiap file Drive unik diperiksa satu kali. SKU menunjukkan seluruh referensi katalog terkait.</p></div>
+              <span id="drive-health-row-count" class="text-[10px] text-slate-400">0 file</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs text-slate-300 min-w-[900px]">
+                <thead class="bg-slate-950 font-bold uppercase text-slate-400 border-b border-slate-800">
+                  <tr><th class="p-3">SKU terkait</th><th class="p-3">Label foto</th><th class="p-3">ID Drive</th><th class="p-3">Status</th><th class="p-3">Ukuran</th><th class="p-3">Tipe</th><th class="p-3">Integritas konten</th><th class="p-3">Modifikasi</th></tr>
+                </thead>
+                <tbody id="drive-health-tbody" class="divide-y divide-slate-800"><tr><td colspan="8" class="p-5 text-center text-slate-500">Jalankan pemeriksaan kesehatan Drive untuk melihat hasil.</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -2058,7 +2096,7 @@
   </div>
 
   <script>
-    // KARTU STOCK build: 2026-11-14-google-drive-photo-performance-v1 (private revalidation cache + lazy thumbnails)
+    // KARTU STOCK build: 2026-11-15-smart-photo-management-v1 (Google Drive health audit + photo reference inventory)
     const ADMIN_PIN_SECRET = "bnbzipper";
 
     const firebaseConfig = {
@@ -2134,6 +2172,7 @@
     let productGalleryImages = [];
     let productGalleryIndex = 0;
     let photoMigrationManifest = null;
+    let photoDriveHealthReport = null;
     let drivePhotoIntegrationConfig = null;
     let drivePhotoIntegrationConfigPromise = null;
     let drivePhotoModeEnabled = false;
@@ -2899,7 +2938,7 @@
       const generatedAt = new Date().toISOString();
       return {
         manifest_version: 1,
-        build: 'kartu-stock-v1.5.0-r2-migration-audit',
+        build: 'kartu-stock-v1.5.3-smart-photo-management',
         generated_at: generatedAt,
         audit_mode: 'read_only_reference_inventory',
         source_dataset: 'products currently loaded in KARTU STOCK application memory; sync cloud before export',
@@ -2942,7 +2981,7 @@
         app_relative_unknown: 'Path Lokal', unknown: 'Tidak Dikenali'
       };
       const statusLabels = {
-        pending_migration: 'Menunggu migrasi', already_r2_reference: 'Referensi R2', no_real_photo: 'Bukan foto asli', review_required: 'Perlu ditinjau'
+        pending_migration: 'Google Drive aktif', already_r2_reference: 'Referensi R2', no_real_photo: 'Bukan foto asli', review_required: 'Perlu ditinjau'
       };
       const rows = manifest.entries.slice(0, 200).map(entry => {
         const provider = providerLabels[entry.source_provider] || entry.source_provider;
@@ -2981,6 +3020,12 @@
           throw new Error('Data produk belum tersedia. Klik Sync Data Cloud sampai berhasil, lalu jalankan audit kembali.');
         }
         photoMigrationManifest = buildPhotoMigrationManifest(products);
+        photoDriveHealthReport = null;
+        ['btn-drive-photo-health-json', 'btn-drive-photo-health-csv'].forEach(id => { const exportButton = document.getElementById(id); if (exportButton) exportButton.disabled = true; });
+        setElementText('drive-photo-health-status', 'Pemeriksaan Drive belum dijalankan untuk manifest terbaru.');
+        ['drive-health-total', 'drive-health-healthy', 'drive-health-attention', 'drive-health-checksum', 'drive-health-size'].forEach(id => setElementText(id, '—'));
+        setElementText('drive-health-row-count', '0 file');
+        setElementHTML('drive-health-tbody', '<tr><td colspan="8" class="p-5 text-center text-slate-500">Jalankan pemeriksaan kesehatan Drive untuk melihat hasil.</td></tr>');
         renderPhotoMigrationAudit(photoMigrationManifest);
         showToast('Audit referensi foto selesai. Tidak ada data yang diubah.');
       } catch (error) {
@@ -2989,6 +3034,164 @@
       } finally {
         if (button) { button.disabled = false; button.innerHTML = original; }
       }
+    }
+
+    function formatPhotoBytes(value) {
+      const bytes = Number(value || 0);
+      if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    function renderDrivePhotoHealthReport(report) {
+      if (!report) return;
+      const summary = report.summary || {};
+      setElementText('drive-health-total', Number(summary.total_checked || 0).toLocaleString('id-ID'));
+      setElementText('drive-health-healthy', Number(summary.healthy || 0).toLocaleString('id-ID'));
+      setElementText('drive-health-attention', Number(summary.attention_required || 0).toLocaleString('id-ID'));
+      setElementText('drive-health-checksum', Number(summary.checksum_verified || 0).toLocaleString('id-ID'));
+      setElementText('drive-health-size', formatPhotoBytes(summary.total_size_bytes));
+      setElementText('drive-health-row-count', `${(report.results || []).length.toLocaleString('id-ID')} file`);
+      setElementText('drive-photo-health-status', `Pemeriksaan selesai: ${new Date(report.generated_at).toLocaleString('id-ID')} · Read-only · ${summary.healthy || 0} sehat, ${summary.attention_required || 0} perlu perhatian.`);
+      ['btn-drive-photo-health-json', 'btn-drive-photo-health-csv'].forEach(id => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = false;
+      });
+
+      const statusLabels = {
+        healthy: 'Sehat & terbaca', not_found_or_not_accessible: 'Tidak ditemukan / tidak dapat diakses',
+        trashed: 'Berada di Trash', outside_product_folder: 'Di luar folder foto produk',
+        unsupported_mime_type: 'Tipe file bukan gambar', product_folder_not_found: 'Folder foto aplikasi tidak ditemukan', size_unknown: 'Ukuran tidak tersedia',
+        too_large_for_app: 'Melebihi batas aplikasi (100 KB)', checksum_mismatch: 'Checksum tidak cocok',
+        unreadable: 'Konten tidak dapat dibaca', check_failed: 'Pemeriksaan gagal', invalid_file_id: 'ID tidak valid'
+      };
+      const rows = (report.results || []).map(result => {
+        const refs = result.references || [];
+        const skus = [...new Set(refs.map(item => item.sku).filter(Boolean))].join(', ') || '-';
+        const labels = refs.map(item => `${item.photo_label || item.photo_type || 'Foto'} (${item.photo_type || 'foto'})`).join(', ') || '-';
+        const status = statusLabels[result.status] || result.status || 'Tidak diketahui';
+        const badge = result.status === 'healthy' ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-rose-950 text-rose-300 border-rose-800';
+        const checksum = result.checksum === 'verified_md5' ? 'MD5 cocok' : (result.status === 'healthy' ? 'Terbaca; MD5 tidak tersedia' : '—');
+        const modified = result.modified_time ? new Date(result.modified_time).toLocaleString('id-ID') : '—';
+        return `<tr>
+          <td class="p-3 font-mono text-white">${escapeHtmlAttribute(skus)}</td>
+          <td class="p-3">${escapeHtmlAttribute(labels)}</td>
+          <td class="p-3 font-mono text-[10px]">${escapeHtmlAttribute(result.file_id || '-')}</td>
+          <td class="p-3"><span class="inline-flex px-2 py-1 rounded-md border text-[10px] ${badge}">${escapeHtmlAttribute(status)}</span></td>
+          <td class="p-3">${escapeHtmlAttribute(formatPhotoBytes(result.size_bytes))}</td>
+          <td class="p-3">${escapeHtmlAttribute(result.mime_type || '-')}</td>
+          <td class="p-3">${escapeHtmlAttribute(checksum)}</td>
+          <td class="p-3">${escapeHtmlAttribute(modified)}</td>
+        </tr>`;
+      }).join('');
+      setElementHTML('drive-health-tbody', rows || '<tr><td colspan="8" class="p-5 text-center text-slate-500">Tidak ada file Google Drive untuk diperiksa.</td></tr>');
+    }
+
+    async function runDrivePhotoHealthCheck() {
+      if (currentRole !== 'admin' || !isAdminAuthenticated) {
+        showToast('Pemeriksaan kesehatan foto hanya tersedia untuk Admin.', 'error');
+        return;
+      }
+      const button = document.getElementById('btn-drive-photo-health');
+      const original = button ? button.innerHTML : '';
+      photoDriveHealthReport = null;
+      ['btn-drive-photo-health-json', 'btn-drive-photo-health-csv'].forEach(id => { const exportButton = document.getElementById(id); if (exportButton) exportButton.disabled = true; });
+      ['drive-health-total', 'drive-health-healthy', 'drive-health-attention', 'drive-health-checksum', 'drive-health-size'].forEach(id => setElementText(id, '—'));
+      setElementText('drive-health-row-count', '0 file');
+      setElementHTML('drive-health-tbody', '<tr><td colspan="8" class="p-5 text-center text-slate-500">Pemeriksaan sedang disiapkan.</td></tr>');
+      try {
+        if (!Array.isArray(products) || !products.length) throw new Error('Data produk belum tersedia. Jalankan Sync Data Cloud terlebih dahulu.');
+        if (!photoMigrationManifest) {
+          photoMigrationManifest = buildPhotoMigrationManifest(products);
+          renderPhotoMigrationAudit(photoMigrationManifest);
+        }
+        const fileIds = [...new Set(photoMigrationManifest.entries.filter(entry => entry.source_provider === 'google_drive' && entry.drive_file_id).map(entry => entry.drive_file_id))];
+        if (!fileIds.length) throw new Error('Tidak ada referensi Google Drive pada manifest saat ini.');
+        if (fileIds.length > 100) throw new Error(`Ditemukan ${fileIds.length} file unik. Batas aman adalah 100 file per satu sesi audit. Ekspor manifest dan jalankan pemeriksaan pada kelompok yang lebih kecil.`);
+        const config = await getDrivePhotoIntegrationConfig(true);
+        if (!config.enabled || !config.authConfigured) throw new Error('Google Drive belum aktif pada konfigurasi server.');
+        const session = await getServerPhotoSession();
+        if (!session.authenticated || session.role !== 'admin') throw new Error('Sesi Admin server tidak aktif. Masuk kembali ke Admin.');
+        if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Memeriksa Drive...'; }
+        const allResults = [];
+        const batchSize = 3;
+        for (let offset = 0; offset < fileIds.length; offset += batchSize) {
+          const batch = fileIds.slice(offset, offset + batchSize);
+          const batchEnd = Math.min(offset + batch.length, fileIds.length);
+          setElementText('drive-photo-health-status', `Memeriksa file ${offset + 1}–${batchEnd} dari ${fileIds.length}. Mohon jangan tutup halaman.`);
+          const response = await fetch('/api/drive/photo-audit', {
+            method: 'POST', credentials: 'same-origin', cache: 'no-store',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileIds: batch })
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || `Pemeriksaan Drive gagal (HTTP ${response.status}).`);
+          allResults.push(...(payload.results || []));
+        }
+        const refsById = new Map();
+        photoMigrationManifest.entries.forEach(entry => {
+          if (!entry.drive_file_id) return;
+          if (!refsById.has(entry.drive_file_id)) refsById.set(entry.drive_file_id, []);
+          refsById.get(entry.drive_file_id).push({ sku: entry.sku, product_name: entry.product_name, photo_type: entry.photo_type, photo_label: entry.photo_label });
+        });
+        const healthyResults = allResults.filter(item => item.status === 'healthy');
+        photoDriveHealthReport = {
+          report_version: 1,
+          build: 'kartu-stock-v1.5.3-smart-photo-management',
+          generated_at: new Date().toISOString(),
+          mode: 'read_only_drive_content_check',
+          summary: {
+            total_checked: allResults.length,
+            healthy: healthyResults.length,
+            attention_required: allResults.length - healthyResults.length,
+            checksum_verified: healthyResults.filter(item => item.checksum === 'verified_md5').length,
+            total_size_bytes: healthyResults.reduce((sum, item) => sum + Number(item.size_bytes || 0), 0)
+          },
+          results: allResults.map(result => ({ ...result, references: refsById.get(result.file_id) || [] }))
+        };
+        renderDrivePhotoHealthReport(photoDriveHealthReport);
+        showToast(`Pemeriksaan Drive selesai: ${photoDriveHealthReport.summary.healthy} file lolos dari ${photoDriveHealthReport.summary.total_checked}.`);
+      } catch (error) {
+        setElementText('drive-photo-health-status', error?.message || 'Pemeriksaan kesehatan Drive gagal.');
+        showToast(error?.message || 'Pemeriksaan kesehatan Drive gagal.', 'error');
+      } finally {
+        if (button) { button.disabled = false; button.innerHTML = original; }
+      }
+    }
+
+    function downloadPhotoHealthReport(format) {
+      if (currentRole !== 'admin' || !isAdminAuthenticated) {
+        showToast('Laporan kesehatan foto hanya tersedia untuk Admin.', 'error');
+        return;
+      }
+      if (!photoDriveHealthReport) {
+        showToast('Jalankan pemeriksaan kesehatan Drive terlebih dahulu.', 'error');
+        return;
+      }
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      let blob;
+      let fileName;
+      if (format === 'csv') {
+        const columns = ['file_id', 'status', 'size_bytes', 'mime_type', 'checksum', 'modified_time', 'references'];
+        const rows = photoDriveHealthReport.results.map(item => ({ ...item, references: (item.references || []).map(ref => `${ref.sku}:${ref.photo_type}:${ref.photo_label}`).join(' | ') }));
+        const lines = [columns.map(csvCell).join(','), ...rows.map(item => columns.map(column => csvCell(item[column])).join(','))];
+        blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        fileName = `kartu-stock-drive-health-${stamp}.csv`;
+      } else {
+        blob = new Blob([JSON.stringify(photoDriveHealthReport, null, 2)], { type: 'application/json;charset=utf-8' });
+        fileName = `kartu-stock-drive-health-${stamp}.json`;
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+      showToast(`Laporan kesehatan foto berhasil diunduh: ${format.toUpperCase()}`);
     }
 
     function csvCell(value) {
@@ -3133,7 +3336,13 @@
 
     function setRole(role) {
       currentRole = role;
-      if (role === 'user') { isAdminAuthenticated = false; photoMigrationManifest = null; }
+      if (role === 'user') {
+        isAdminAuthenticated = false;
+        photoMigrationManifest = null;
+        photoDriveHealthReport = null;
+        ['btn-drive-photo-health-json', 'btn-drive-photo-health-csv'].forEach(id => { const button = document.getElementById(id); if (button) button.disabled = true; });
+        setElementText('drive-photo-health-status', 'Pemeriksaan Drive belum dijalankan.');
+      }
 
       const btnAdmin = document.getElementById('btn-role-admin');
       const btnUser = document.getElementById('btn-role-user');
@@ -3201,7 +3410,7 @@
         mutasi: '📋 Ledger Histori Mutasi',
         report: '🖨️ Pusat Cetak Laporan Perusahaan',
         'report-pengajuan': '<i class="fa-solid fa-file-lines text-amber-400"></i> Laporan Pengajuan Barang',
-        'photo-audit': '<i class="fa-solid fa-images text-cyan-400"></i> Audit Foto & Migrasi R2'
+        'photo-audit': '<i class="fa-solid fa-images text-cyan-400"></i> Smart Photo Management'
       };
       setElementHTML('page-title', titles[tabId] || 'KARTU STOCK');
 
