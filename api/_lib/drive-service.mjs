@@ -152,6 +152,15 @@ async function driveApi(accessToken, url, options = {}) {
   }
   return response;
 }
+async function getExistingProductFolder(accessToken) {
+  // Read-only lookup for audit endpoints. Unlike getOrCreateProductFolder,
+  // this function never creates a folder as a side effect.
+  const q = `name = '${PRODUCT_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=20&fields=files(id,name,mimeType,parents)`;
+  const listResponse = await driveApi(accessToken, listUrl);
+  const list = await listResponse.json();
+  return Array.isArray(list.files) ? (list.files.find(file => file.mimeType === 'application/vnd.google-apps.folder') || null) : null;
+}
 async function getOrCreateProductFolder(accessToken) {
   // drive.file scope can manage app-created folders/files without making the folder public.
   const q = `name = '${PRODUCT_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
@@ -215,6 +224,61 @@ async function readDrivePhoto(accessToken, fileId, verifiedFile = null) {
   }
   return { file, bytes };
 }
+async function auditDrivePhotoInProductFolder(accessToken, fileId, folderId) {
+  const safeId = String(fileId || '');
+  if (!/^[a-zA-Z0-9_-]{10,200}$/.test(safeId)) {
+    return { file_id: safeId, status: 'invalid_file_id' };
+  }
+  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(safeId)}?fields=id,name,mimeType,parents,size,trashed,md5Checksum,modifiedTime`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (response.status === 404) return { file_id: safeId, status: 'not_found_or_not_accessible' };
+  if (!response.ok) {
+    await response.arrayBuffer().catch(() => null);
+    const error = new Error('GOOGLE_DRIVE_METADATA_FAILED');
+    error.status = response.status;
+    throw error;
+  }
+  const file = await response.json();
+  if (file.trashed) return { file_id: safeId, status: 'trashed', modified_time: file.modifiedTime || null };
+  if (!Array.isArray(file.parents) || !file.parents.includes(folderId)) {
+    return { file_id: safeId, status: 'outside_product_folder' };
+  }
+  if (!String(file.mimeType || '').startsWith('image/')) {
+    return { file_id: safeId, status: 'unsupported_mime_type', mime_type: file.mimeType || null };
+  }
+  const size = Number(file.size);
+  if (!Number.isFinite(size) || size <= 0) {
+    return { file_id: safeId, status: 'size_unknown', mime_type: file.mimeType || null };
+  }
+  if (size > MAX_PHOTO_BYTES) {
+    return { file_id: safeId, status: 'too_large_for_app', size_bytes: size, mime_type: file.mimeType || null };
+  }
+
+  try {
+    const content = await readDrivePhoto(accessToken, safeId, file);
+    if (!content || !content.bytes?.length) {
+      return { file_id: safeId, status: 'unreadable', size_bytes: size, mime_type: file.mimeType || null };
+    }
+    return {
+      file_id: safeId,
+      status: 'healthy',
+      size_bytes: content.bytes.length,
+      mime_type: file.mimeType || null,
+      modified_time: file.modifiedTime || null,
+      checksum: file.md5Checksum ? 'verified_md5' : 'not_available',
+      readable: true
+    };
+  } catch (error) {
+    if (error?.message === 'DRIVE_PHOTO_CHANGED_DURING_READ') {
+      return { file_id: safeId, status: 'checksum_mismatch', size_bytes: size, mime_type: file.mimeType || null };
+    }
+    if (error?.message === 'GOOGLE_DRIVE_API_FAILED') {
+      return { file_id: safeId, status: 'unreadable', size_bytes: size, mime_type: file.mimeType || null };
+    }
+    throw error;
+  }
+}
+
 async function deleteDrivePhoto(accessToken, fileId) {
   // Safety first: only allow image files created/stored in the dedicated product-photo folder.
   const folder = await getOrCreateProductFolder(accessToken);
@@ -240,6 +304,6 @@ export default {
   SESSION_COOKIE, SESSION_SECONDS, MAX_PHOTO_BYTES,
   env, isAuthConfigured, isDriveConfigured, safeEqual, encodeState, verifySignedState,
   signSession, readSession, setSessionCookie, clearSessionCookie, originMatchesRequest,
-  sendJson, bodyObject, sanitizeFileName, getDriveAccessToken, getOrCreateProductFolder,
-  uploadDrivePhoto, getDrivePhotoMetadata, readDrivePhoto, deleteDrivePhoto
+  sendJson, bodyObject, sanitizeFileName, getDriveAccessToken, getExistingProductFolder, getOrCreateProductFolder,
+  uploadDrivePhoto, getDrivePhotoMetadata, readDrivePhoto, auditDrivePhotoInProductFolder, deleteDrivePhoto
 };
