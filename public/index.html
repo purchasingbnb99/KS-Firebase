@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<!-- KARTU STOCK build: v1.5.4-advanced-photo-gallery-controls; APP_VERSION intentionally unchanged. -->
+<!-- KARTU STOCK build: v1.5.5-stock-report-print-isolation; APP_VERSION intentionally unchanged. -->
 <!-- Stock Report Layout Optimization: conditional Asal column + nowrap currency. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-11-15-advanced-photo-gallery-controls-v1" />
+  <meta name="app-build" content="2026-11-24-stock-report-print-isolation-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -307,6 +307,36 @@
       body.printing-request #print-request-paper { border: none !important; box-shadow: none !important; padding: 0 !important; }
 
       @page { size: A4 portrait; margin: 15mm; }
+      /*
+       * Isolated Stock Report print mode:
+       * Only the report section is kept as a direct body child during print.
+       * This removes app/main scroll wrappers and any trailing hidden siblings
+       * from the print flow, preventing an otherwise empty final sheet.
+       */
+      body.printing-stock-report > *:not(#tab-report-view) {
+        display: none !important;
+      }
+      body.printing-stock-report > #tab-report-view {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        page: ks-stock-report;
+        break-after: auto !important;
+        page-break-after: auto !important;
+      }
+      body.printing-stock-report > #tab-report-view > * {
+        margin: 0 !important;
+      }
+      body.printing-stock-report #app {
+        display: none !important;
+      }
+
       /* Stock report pagination: repeat both report identity and column labels. */
       #tab-report-view { page: ks-stock-report; }
       #tab-report-view #report-stock-table {
@@ -6693,14 +6723,74 @@
         .sort(compareProductsForCatalog);
     }
 
+    // Isolated print state for Stock Report. The report section is temporarily
+    // moved to <body> so application wrappers, scroll containers, and hidden
+    // siblings cannot create an extra trailing print page.
+    let stockReportPrintState = null;
+
+    function restoreStockReportPrintMode() {
+      const state = stockReportPrintState;
+      if (!state) return;
+
+      stockReportPrintState = null;
+      window.removeEventListener('afterprint', restoreStockReportPrintMode);
+
+      const targetParent = state.originalParent && state.originalParent.isConnected
+        ? state.originalParent
+        : document.getElementById('main-content');
+
+      if (targetParent && state.reportSection.parentNode === document.body) {
+        if (state.originalNextSibling && state.originalNextSibling.parentNode === targetParent) {
+          targetParent.insertBefore(state.reportSection, state.originalNextSibling);
+        } else {
+          targetParent.appendChild(state.reportSection);
+        }
+      }
+
+      document.body.classList.remove('printing-stock-report');
+      if (state.scrollContainer && state.scrollContainer.isConnected) {
+        state.scrollContainer.scrollTop = state.scrollTop;
+      }
+    }
+
     function printStockReport() {
       const filtered = getFilteredReportProducts();
       if (filtered.length === 0) {
         showToast('Tidak ada data barang yang memiliki mutasi pada periode yang dipilih.', 'error');
         return;
       }
+
+      const reportSection = document.getElementById('tab-report-view');
+      if (!reportSection || !reportSection.parentNode) {
+        showToast('Area laporan tidak ditemukan. Silakan muat ulang halaman.', 'error');
+        return;
+      }
+      if (stockReportPrintState) return;
+
       renderReportTable();
-      setTimeout(() => window.print(), 50);
+
+      const scrollContainer = document.getElementById('main-content');
+      stockReportPrintState = {
+        reportSection,
+        originalParent: reportSection.parentNode,
+        originalNextSibling: reportSection.nextSibling,
+        scrollContainer,
+        scrollTop: scrollContainer ? scrollContainer.scrollTop : 0
+      };
+
+      // The afterprint event restores the report whether the user prints,
+      // saves as PDF, or cancels the browser print dialog.
+      window.addEventListener('afterprint', restoreStockReportPrintMode);
+      document.body.classList.add('printing-stock-report');
+
+      try {
+        document.body.appendChild(reportSection);
+        window.print();
+      } catch (error) {
+        console.error('Gagal mencetak laporan stok:', error);
+        restoreStockReportPrintMode();
+        showToast('Gagal membuka cetak laporan. Silakan coba kembali.', 'error');
+      }
     }
 
     function renderReportTable() {
