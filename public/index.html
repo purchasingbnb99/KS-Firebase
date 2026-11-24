@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- KARTU STOCK build: v1.5.4-advanced-photo-gallery-controls + approval-watermark-option-c; APP_VERSION intentionally unchanged. -->
+<!-- KARTU STOCK build: v1.5.4-advanced-photo-gallery-controls; APP_VERSION intentionally unchanged. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-11-15-advanced-photo-gallery-controls-v1+approval-watermark-option-c" />
+  <meta name="app-build" content="2026-11-15-advanced-photo-gallery-controls-v1" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -105,10 +105,11 @@
       }
     }
 
-
     /* ============================================================
-       APPROVAL REQUEST PRINT STATUS — WATERMARK OPTION C
-       Scoped only to #print-request-paper; other print modules remain unchanged.
+       APPROVAL REQUEST PRINT STATUS — WATERMARK OPTION C (FIX)
+       Strictly scoped to the Approval Request paper.
+       Watermark is a translucent foreground layer so table/card
+       backgrounds cannot mask parts of the word; header stays above it.
        ============================================================ */
     #print-request-paper {
       position: relative;
@@ -123,30 +124,52 @@
       z-index: 1;
     }
 
+    /* Keep the form header and status stamp clear of the watermark. */
+    #print-request-paper #doc-req-header {
+      z-index: 3;
+    }
+
     #print-request-paper .request-watermark {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      z-index: 0;
+      inset: 0;
+      z-index: 2;
       display: none;
-      transform: translate(-50%, -50%) rotate(-27deg);
-      font-size: clamp(42px, 7.2vw, 68px);
-      line-height: 1;
-      font-weight: 900;
-      letter-spacing: .12em;
-      white-space: nowrap;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      padding: 12px;
+      overflow: visible;
       pointer-events: none;
       user-select: none;
-      opacity: .17;
+    }
+
+    #print-request-paper.request-status-approved .request-watermark,
+    #print-request-paper.request-status-rejected .request-watermark {
+      display: flex;
+    }
+
+    #print-request-paper .request-watermark span {
+      display: block;
+      max-width: 100%;
+      color: currentColor;
+      font-size: clamp(30px, 6vw, 48px);
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: .055em;
+      white-space: nowrap;
+      text-align: center;
+      opacity: .13;
+      transform: rotate(-27deg) scale(.9);
+      transform-origin: center;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
     #print-request-paper.request-status-approved .request-watermark {
-      display: block;
       color: #059669;
     }
 
     #print-request-paper.request-status-rejected .request-watermark {
-      display: block;
       color: #dc2626;
     }
 
@@ -1671,15 +1694,17 @@
     <!-- Modal Form Request Print -->
     <div id="modal-print-request" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[80] overflow-y-auto p-4 flex justify-center">
       <div id="print-request-paper" class="bg-white text-slate-900 rounded-2xl p-8 max-w-2xl w-full my-auto shadow-2xl border border-slate-200">
-        <div id="doc-req-watermark" class="request-watermark" aria-hidden="true"></div>
-        <div class="border-b-2 border-slate-900 pb-4 mb-5 flex justify-between items-start">
+        <div id="doc-req-watermark" class="request-watermark" aria-hidden="true"><span id="doc-req-watermark-text"></span></div>
+        <div id="doc-req-header" class="border-b-2 border-slate-900 pb-4 mb-5 flex justify-between items-start">
           <div>
             <h2 class="text-2xl font-black text-slate-900 tracking-tight">KARTU STOCK</h2>
             <p class="text-xs font-bold text-slate-600 uppercase tracking-wider">Form Pengajuan Permintaan Barang Gudang</p>
           </div>
           <div class="text-right">
-            <span id="doc-req-id" class="font-mono text-xs font-bold bg-slate-100 px-2 py-1 rounded border border-slate-300">REQ-00000</span>
-            <span id="doc-req-status" class="request-status-stamp request-status-pending">PENDING</span>
+            <div class="flex items-center justify-end flex-wrap gap-2">
+              <span id="doc-req-id" class="font-mono text-xs font-bold bg-slate-100 px-2 py-1 rounded border border-slate-300">REQ-00000</span>
+              <span id="doc-req-status" class="request-status-stamp request-status-pending">PENDING</span>
+            </div>
             <p id="doc-req-date" class="text-xs text-slate-500 mt-1">Tanggal: -</p>
           </div>
         </div>
@@ -2184,7 +2209,7 @@
   </div>
 
   <script>
-    // KARTU STOCK build: 2026-11-15-advanced-photo-gallery-controls-v1 + approval watermark print option C
+    // KARTU STOCK build: 2026-11-15-advanced-photo-gallery-controls-v1 (safe primary, reorder, preview and replace controls)
     const ADMIN_PIN_SECRET = "bnbzipper";
 
     const firebaseConfig = {
@@ -5483,19 +5508,10 @@
     }
 
     function openPrintRequestModal(reqData) {
-      setElementText('doc-req-id', reqData.id || 'REQ-00000');
-      setElementText('doc-req-date', `Tanggal: ${reqData.date}`);
-      setElementText('doc-req-name', reqData.requester);
-      setElementText('doc-req-dept', reqData.dept);
-      setElementText('doc-req-sku', reqData.sku);
-      setElementText('doc-req-item', reqData.productName);
-      setElementText('doc-req-qty', `${reqData.qty} Pcs`);
-      setElementText('doc-req-note', reqData.note);
-      setElementText('doc-sign-pemohon', `( ${reqData.requester} )`);
-
-      // Status comes from the existing request record; no Firestore schema change.
+      // Resolve from the existing in-memory record and session override only.
+      // No database fields or approval workflows are changed by printing.
       const statusOverride = approvalStatusOverrides.get(String(reqData.id || ''));
-      const requestStatus = String(statusOverride || reqData.status || '').trim().toLowerCase();
+      const requestStatus = String(statusOverride || reqData.status || 'pending').trim().toLowerCase();
       const statusMeta = {
         approved: { label: 'APPROVED', className: 'request-status-approved', watermark: 'APPROVED' },
         rejected: { label: 'REJECTED', className: 'request-status-rejected', watermark: 'REJECTED' },
@@ -5506,6 +5522,12 @@
         className: 'request-status-unknown',
         watermark: ''
       };
+
+      const statusBadge = document.getElementById('doc-req-status');
+      if (statusBadge) {
+        statusBadge.textContent = printStatus.label;
+        statusBadge.className = `request-status-stamp ${printStatus.className}`;
+      }
 
       const printPaper = document.getElementById('print-request-paper');
       if (printPaper) {
@@ -5518,8 +5540,18 @@
         printPaper.classList.add(printStatus.className);
       }
 
-      setElementText('doc-req-status', printStatus.label);
-      setElementText('doc-req-watermark', printStatus.watermark);
+      const watermarkText = document.getElementById('doc-req-watermark-text');
+      if (watermarkText) watermarkText.textContent = printStatus.watermark;
+
+      setElementText('doc-req-id', reqData.id || 'REQ-00000');
+      setElementText('doc-req-date', `Tanggal: ${reqData.date}`);
+      setElementText('doc-req-name', reqData.requester);
+      setElementText('doc-req-dept', reqData.dept);
+      setElementText('doc-req-sku', reqData.sku);
+      setElementText('doc-req-item', reqData.productName);
+      setElementText('doc-req-qty', `${reqData.qty} Pcs`);
+      setElementText('doc-req-note', reqData.note);
+      setElementText('doc-sign-pemohon', `( ${reqData.requester} )`);
 
       openModal('modal-print-request');
     }
