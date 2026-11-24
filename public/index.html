@@ -214,6 +214,40 @@
       background: #f1f5f9;
     }
 
+
+    /* ============================================================
+       STOCK REPORT PRINT PAGINATION
+       Scoped to the inventory stock report only.
+       The named page adds its own footer without affecting PO,
+       Approval Request, ledger, or other print documents.
+       Chrome 131+ supports page margin boxes and page counters.
+       ============================================================ */
+    @page ks-stock-report {
+      size: A4 portrait;
+      margin: 15mm 12mm 20mm 12mm;
+
+      @bottom-left {
+        content: "KARTU STOCK | Laporan Persediaan";
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 7pt;
+        color: #64748b;
+        border-top: 0.5pt solid #cbd5e1;
+        padding-top: 3mm;
+        vertical-align: top;
+      }
+
+      @bottom-right {
+        content: "Halaman " counter(page) " dari " counter(pages);
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 8pt;
+        font-weight: 700;
+        color: #334155;
+        border-top: 0.5pt solid #cbd5e1;
+        padding-top: 3mm;
+        vertical-align: top;
+      }
+    }
+
     @media print {
       aside, header, .print\:hidden, #toast-container, #modals-root > div:not(#modal-print-po):not(#modal-print-request) {
         display: none !important;
@@ -258,6 +292,43 @@
       body.printing-request #print-request-paper { border: none !important; box-shadow: none !important; padding: 0 !important; }
 
       @page { size: A4 portrait; margin: 15mm; }
+      /* Stock report pagination: repeat both report identity and column labels. */
+      #tab-report-view { page: ks-stock-report; }
+      #tab-report-view #report-stock-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        page-break-inside: auto;
+        break-inside: auto;
+      }
+      #tab-report-view #report-stock-table thead {
+        display: table-header-group !important;
+      }
+      #tab-report-view #report-stock-table thead tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+      #tab-report-view #report-stock-table tbody tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+      /* tfoot must appear once after the last item, not repeat on each page. */
+      #tab-report-view #report-stock-table tfoot {
+        display: table-row-group !important;
+      }
+      #tab-report-view #report-stock-table tfoot tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+      #tab-report-view #report-stock-table .report-title-cell {
+        background: #ffffff !important;
+        color: #0f172a !important;
+      }
+      #tab-report-view #report-stock-table th,
+      #tab-report-view #report-stock-table td {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
     }
 
     #mobile-menu-btn {
@@ -1401,21 +1472,26 @@
           </div>
 
           <div class="bg-slate-900 p-8 rounded-2xl shadow-sm border border-slate-800 print:shadow-none print:border-none print:p-0 print:bg-white print:text-black">
-            <div class="border-b-2 border-slate-700 print:border-slate-900 pb-4 mb-6 flex justify-between items-end">
-              <div>
-                <h1 class="text-2xl font-black text-white print:text-black tracking-tight">KARTU STOCK</h1>
-                <p class="text-xs text-slate-400 print:text-slate-600">Laporan Resmi Rekapitulasi Persediaan Kartu Stok Gudang</p>
-              </div>
-              <div class="text-right text-xs">
-                <p class="font-bold text-white print:text-black">Kategori: <span id="report-filter-label" class="uppercase text-orange-400 print:text-orange-600">SEMUA</span></p>
-                <p class="font-bold text-white print:text-black">Periode: <span id="report-period-label" class="text-orange-400 print:text-orange-600">SEMUA DATA</span></p>
-                <p class="text-slate-400 print:text-slate-500">Tanggal Cetak: <span id="report-print-date">11/08/2026</span></p>
-              </div>
-            </div>
-
-            <table class="w-full text-left text-xs text-slate-300 print:text-slate-800">
-              <thead class="bg-slate-950 print:bg-slate-100 border-y border-slate-800 print:border-slate-300 font-bold uppercase text-slate-300 print:text-slate-900">
-                <tr>
+            <table id="report-stock-table" class="w-full text-left text-xs text-slate-300 print:text-slate-800">
+              <thead class="report-stock-thead bg-slate-950 print:bg-slate-100 border-y border-slate-800 print:border-slate-300 font-bold uppercase text-slate-300 print:text-slate-900">
+                <!-- Report identity is part of THEAD so it repeats on every printed page. -->
+                <tr class="report-stock-title-row">
+                  <th colspan="8" class="report-title-cell p-0 text-left font-normal bg-slate-900 print:bg-white">
+                    <div class="border-b-2 border-slate-700 print:border-slate-900 pb-4 mb-4 flex justify-between items-end">
+                      <div>
+                        <h1 class="text-2xl font-black text-white print:text-black tracking-tight">KARTU STOCK</h1>
+                        <p class="text-xs text-slate-400 print:text-slate-600">Laporan Resmi Rekapitulasi Persediaan Kartu Stok Gudang</p>
+                      </div>
+                      <div class="text-right text-xs">
+                        <p class="font-bold text-white print:text-black">Kategori: <span id="report-filter-label" class="uppercase text-orange-400 print:text-orange-600">SEMUA</span></p>
+                        <p class="font-bold text-white print:text-black">Periode: <span id="report-period-label" class="text-orange-400 print:text-orange-600">SEMUA DATA</span></p>
+                        <p class="text-slate-400 print:text-slate-500">Tanggal Cetak: <span id="report-print-date">11/08/2026</span></p>
+                      </div>
+                    </div>
+                  </th>
+                </tr>
+                <tr class="report-stock-column-row">
+                  <th class="w-8 py-2.5 px-2 text-center whitespace-nowrap">No</th>
                   <th class="py-2.5 px-3">SKU</th>
                   <th class="py-2.5 px-3">Nama Barang</th>
                   <th class="py-2.5 px-3">Asal</th>
@@ -1428,9 +1504,9 @@
               <tbody id="report-tbody" class="divide-y divide-slate-800 print:divide-slate-200"></tbody>
               <tfoot class="border-t-2 border-slate-700 print:border-slate-900 font-bold bg-slate-950 print:bg-slate-50 text-white print:text-black">
                 <tr>
-                  <td colSpan="4" class="py-3 px-3 text-right">TOTAL NILAI KESELURUHAN:</td>
+                  <td colspan="5" class="py-3 px-3 text-right">TOTAL NILAI KESELURUHAN:</td>
                   <td id="report-total-items" class="py-3 px-3 text-center font-black">0 Pcs</td>
-                  <td colSpan="2" id="report-total-asset" class="py-3 px-3 text-right text-sm font-black text-emerald-400 print:text-emerald-700">Rp 0</td>
+                  <td colspan="2" id="report-total-asset" class="py-3 px-3 text-right text-sm font-black text-emerald-400 print:text-emerald-700">Rp 0</td>
                 </tr>
               </tfoot>
             </table>
@@ -6568,14 +6644,15 @@
       const filtered = getFilteredReportProducts();
 
       if (filtered.length === 0) {
-        setElementHTML('report-tbody', `<tr><td colspan="7" class="py-6 text-center text-slate-500 font-medium">Belum ada data barang.</td></tr>`);
+        setElementHTML('report-tbody', `<tr><td colspan="8" class="py-6 text-center text-slate-500 font-medium">Belum ada data barang.</td></tr>`);
         setElementText('report-total-items', '0 Pcs');
         setElementText('report-total-asset', 'Rp 0');
         return;
       }
 
-      const rows = filtered.map(p => `
+      const rows = filtered.map((p, index) => `
         <tr>
+          <td class="py-2 px-2 text-center font-mono text-slate-400 print:text-black">${index + 1}</td>
           <td class="py-2 px-3 font-mono font-bold text-white print:text-black">${p.sku}</td>
           <td class="py-2 px-3 font-medium text-slate-200 print:text-black">${p.name}</td>
           <td class="py-2 px-3 uppercase text-[10px] font-bold">${p.origin}</td>
