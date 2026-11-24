@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <!-- KARTU STOCK build: v1.5.3-smart-photo-management; APP_VERSION intentionally unchanged. -->
+<!-- Stock Report Layout Optimization: conditional Asal column + nowrap currency. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
@@ -248,6 +249,20 @@
       }
     }
 
+    /* Stock report only: hide source column when one category is selected. */
+    #tab-report-view #report-stock-table.report-hide-origin .report-origin-column {
+      display: none !important;
+    }
+    #tab-report-view #report-stock-table.report-hide-origin col.report-col-origin {
+      display: none !important;
+      width: 0 !important;
+    }
+    #tab-report-view #report-stock-table .report-money-cell {
+      white-space: nowrap;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
     @media print {
       aside, header, .print\:hidden, #toast-container, #modals-root > div:not(#modal-print-po):not(#modal-print-request) {
         display: none !important;
@@ -299,6 +314,46 @@
         border-collapse: collapse !important;
         page-break-inside: auto;
         break-inside: auto;
+      }
+      #tab-report-view #report-stock-table {
+        table-layout: fixed !important;
+      }
+      /* Column proportions when the Asal column is present (all categories). */
+      #tab-report-view #report-stock-table .report-col-no { width: 4%; }
+      #tab-report-view #report-stock-table .report-col-sku { width: 15%; }
+      #tab-report-view #report-stock-table .report-col-name { width: 22%; }
+      #tab-report-view #report-stock-table .report-col-origin { width: 7%; }
+      #tab-report-view #report-stock-table .report-col-location { width: 13%; }
+      #tab-report-view #report-stock-table .report-col-stock { width: 7%; }
+      #tab-report-view #report-stock-table .report-col-price { width: 14%; }
+      #tab-report-view #report-stock-table .report-col-total { width: 18%; }
+      /* Recover the Asal column's space for the important name and amount columns. */
+      #tab-report-view #report-stock-table.report-hide-origin .report-col-no { width: 4%; }
+      #tab-report-view #report-stock-table.report-hide-origin .report-col-sku { width: 16%; }
+      #tab-report-view #report-stock-table.report-hide-origin .report-col-name { width: 27%; }
+      #tab-report-view #report-stock-table.report-hide-origin .report-col-location { width: 14%; }
+      #tab-report-view #report-stock-table.report-hide-origin .report-col-stock { width: 7%; }
+      #tab-report-view #report-stock-table.report-hide-origin .report-col-price { width: 14%; }
+      #tab-report-view #report-stock-table.report-hide-origin .report-col-total { width: 18%; }
+      #tab-report-view #report-stock-table th,
+      #tab-report-view #report-stock-table td {
+        padding-left: 1.5mm !important;
+        padding-right: 1.5mm !important;
+        vertical-align: top;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+      #tab-report-view #report-stock-table td.report-money-cell {
+        white-space: nowrap !important;
+        font-size: 7.5pt !important;
+        letter-spacing: -0.1px;
+      }
+      #tab-report-view #report-stock-table th.report-money-header {
+        text-align: right !important;
+      }
+      #tab-report-view #report-stock-table td.report-code-cell {
+        white-space: nowrap !important;
+        font-size: 7.5pt !important;
       }
       #tab-report-view #report-stock-table thead {
         display: table-header-group !important;
@@ -1473,6 +1528,16 @@
 
           <div class="bg-slate-900 p-8 rounded-2xl shadow-sm border border-slate-800 print:shadow-none print:border-none print:p-0 print:bg-white print:text-black">
             <table id="report-stock-table" class="w-full text-left text-xs text-slate-300 print:text-slate-800">
+              <colgroup>
+                <col class="report-col-no" />
+                <col class="report-col-sku" />
+                <col class="report-col-name" />
+                <col class="report-col-origin" />
+                <col class="report-col-location" />
+                <col class="report-col-stock" />
+                <col class="report-col-price" />
+                <col class="report-col-total" />
+              </colgroup>
               <thead class="report-stock-thead bg-slate-950 print:bg-slate-100 border-y border-slate-800 print:border-slate-300 font-bold uppercase text-slate-300 print:text-slate-900">
                 <!-- Report identity is part of THEAD so it repeats on every printed page. -->
                 <tr class="report-stock-title-row">
@@ -1494,17 +1559,17 @@
                   <th class="w-8 py-2.5 px-2 text-center whitespace-nowrap">No</th>
                   <th class="py-2.5 px-3">SKU</th>
                   <th class="py-2.5 px-3">Nama Barang</th>
-                  <th class="py-2.5 px-3">Asal</th>
+                  <th class="py-2.5 px-3 report-origin-column">Asal</th>
                   <th class="py-2.5 px-3">Lokasi Gudang</th>
                   <th class="py-2.5 px-3 text-center">Stok</th>
-                  <th class="py-2.5 px-3 text-right">Harga Satuan</th>
-                  <th class="py-2.5 px-3 text-right">Total Nilai</th>
+                  <th class="py-2.5 px-3 text-right report-money-header">Harga Satuan</th>
+                  <th class="py-2.5 px-3 text-right report-money-header">Total Nilai</th>
                 </tr>
               </thead>
               <tbody id="report-tbody" class="divide-y divide-slate-800 print:divide-slate-200"></tbody>
               <tfoot class="border-t-2 border-slate-700 print:border-slate-900 font-bold bg-slate-950 print:bg-slate-50 text-white print:text-black">
                 <tr>
-                  <td colspan="5" class="py-3 px-3 text-right">TOTAL NILAI KESELURUHAN:</td>
+                  <td id="report-total-label-cell" colspan="5" class="py-3 px-3 text-right">TOTAL NILAI KESELURUHAN:</td>
                   <td id="report-total-items" class="py-3 px-3 text-center font-black">0 Pcs</td>
                   <td colspan="2" id="report-total-asset" class="py-3 px-3 text-right text-sm font-black text-emerald-400 print:text-emerald-700">Rp 0</td>
                 </tr>
@@ -6587,9 +6652,19 @@
       setElementText('report-print-date', new Date().toLocaleDateString('id-ID'));
       setElementText('report-period-label', getReportDateRangeLabel());
       const filtered = getFilteredReportProducts();
+      const showOriginColumn = reportFilter === 'all';
+      const reportTable = document.getElementById('report-stock-table');
+      if (reportTable) {
+        reportTable.classList.toggle('report-hide-origin', !showOriginColumn);
+        const reportTitleCell = reportTable.querySelector('.report-title-cell');
+        if (reportTitleCell) reportTitleCell.colSpan = showOriginColumn ? 8 : 7;
+      }
+      const totalLabelCell = document.getElementById('report-total-label-cell');
+      if (totalLabelCell) totalLabelCell.colSpan = showOriginColumn ? 5 : 4;
+      const visibleColumnCount = showOriginColumn ? 8 : 7;
 
       if (filtered.length === 0) {
-        setElementHTML('report-tbody', `<tr><td colspan="8" class="py-6 text-center text-slate-500 font-medium">Belum ada data barang.</td></tr>`);
+        setElementHTML('report-tbody', `<tr><td colspan="${visibleColumnCount}" class="py-6 text-center text-slate-500 font-medium">Belum ada data barang.</td></tr>`);
         setElementText('report-total-items', '0 Pcs');
         setElementText('report-total-asset', 'Rp 0');
         return;
@@ -6598,13 +6673,13 @@
       const rows = filtered.map((p, index) => `
         <tr>
           <td class="py-2 px-2 text-center font-mono text-slate-400 print:text-black">${index + 1}</td>
-          <td class="py-2 px-3 font-mono font-bold text-white print:text-black">${p.sku}</td>
+          <td class="py-2 px-3 font-mono font-bold text-white print:text-black report-code-cell">${p.sku}</td>
           <td class="py-2 px-3 font-medium text-slate-200 print:text-black">${p.name}</td>
-          <td class="py-2 px-3 uppercase text-[10px] font-bold">${p.origin}</td>
+          <td class="py-2 px-3 uppercase text-[10px] font-bold report-origin-column">${p.origin}</td>
           <td class="py-2 px-3">${p.warehouse} (${p.shelf})</td>
           <td class="py-2 px-3 text-center font-bold">${p.stock} Pcs</td>
-          <td class="py-2 px-3 text-right">Rp ${p.price.toLocaleString('id-ID')}</td>
-          <td class="py-2 px-3 text-right font-bold">Rp ${(p.stock * p.price).toLocaleString('id-ID')}</td>
+          <td class="py-2 px-3 text-right report-money-cell">Rp ${Number(p.price || 0).toLocaleString('id-ID')}</td>
+          <td class="py-2 px-3 text-right font-bold report-money-cell">Rp ${(Number(p.stock || 0) * Number(p.price || 0)).toLocaleString('id-ID')}</td>
         </tr>`).join('');
       setElementHTML('report-tbody', rows);
 
