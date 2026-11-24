@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<!-- KARTU STOCK build: v1.5.4-advanced-photo-gallery-controls; APP_VERSION intentionally unchanged. -->
+<!-- KARTU STOCK build: v1.5.4-advanced-photo-gallery-controls + approval-watermark-option-c; APP_VERSION intentionally unchanged. -->
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="app-build" content="2026-11-15-advanced-photo-gallery-controls-v1" />
+  <meta name="app-build" content="2026-11-15-advanced-photo-gallery-controls-v1+approval-watermark-option-c" />
   <title>KARTU STOCK - Enterprise</title>
   
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b1120'/><rect x='6' y='6' width='88' height='88' rx='18' fill='none' stroke='%23fb923c' stroke-width='5'/><text x='50%' y='66%' font-size='38' font-weight='900' font-family='Arial,sans-serif' fill='white' text-anchor='middle'>KS</text></svg>">
@@ -103,6 +103,92 @@
       .brand-logo-rgb::after {
         animation: none;
       }
+    }
+
+
+    /* ============================================================
+       APPROVAL REQUEST PRINT STATUS — WATERMARK OPTION C
+       Scoped only to #print-request-paper; other print modules remain unchanged.
+       ============================================================ */
+    #print-request-paper {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    #print-request-paper > :not(.request-watermark) {
+      position: relative;
+      z-index: 1;
+    }
+
+    #print-request-paper .request-watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      z-index: 0;
+      display: none;
+      transform: translate(-50%, -50%) rotate(-27deg);
+      font-size: clamp(42px, 7.2vw, 68px);
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: .12em;
+      white-space: nowrap;
+      pointer-events: none;
+      user-select: none;
+      opacity: .17;
+    }
+
+    #print-request-paper.request-status-approved .request-watermark {
+      display: block;
+      color: #059669;
+    }
+
+    #print-request-paper.request-status-rejected .request-watermark {
+      display: block;
+      color: #dc2626;
+    }
+
+    .request-status-stamp {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 6px;
+      padding: 4px 10px;
+      border: 1.5px solid;
+      border-radius: 999px;
+      font-size: 10px;
+      line-height: 1.2;
+      font-weight: 900;
+      letter-spacing: .12em;
+      white-space: nowrap;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .request-status-stamp.request-status-pending {
+      color: #b45309;
+      border-color: #d97706;
+      background: #fff7ed;
+    }
+
+    .request-status-stamp.request-status-approved {
+      color: #047857;
+      border-color: #059669;
+      background: #ecfdf5;
+    }
+
+    .request-status-stamp.request-status-rejected {
+      color: #b91c1c;
+      border-color: #dc2626;
+      background: #fef2f2;
+    }
+
+    .request-status-stamp.request-status-unknown {
+      color: #475569;
+      border-color: #64748b;
+      background: #f1f5f9;
     }
 
     @media print {
@@ -1585,6 +1671,7 @@
     <!-- Modal Form Request Print -->
     <div id="modal-print-request" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[80] overflow-y-auto p-4 flex justify-center">
       <div id="print-request-paper" class="bg-white text-slate-900 rounded-2xl p-8 max-w-2xl w-full my-auto shadow-2xl border border-slate-200">
+        <div id="doc-req-watermark" class="request-watermark" aria-hidden="true"></div>
         <div class="border-b-2 border-slate-900 pb-4 mb-5 flex justify-between items-start">
           <div>
             <h2 class="text-2xl font-black text-slate-900 tracking-tight">KARTU STOCK</h2>
@@ -1592,6 +1679,7 @@
           </div>
           <div class="text-right">
             <span id="doc-req-id" class="font-mono text-xs font-bold bg-slate-100 px-2 py-1 rounded border border-slate-300">REQ-00000</span>
+            <span id="doc-req-status" class="request-status-stamp request-status-pending">PENDING</span>
             <p id="doc-req-date" class="text-xs text-slate-500 mt-1">Tanggal: -</p>
           </div>
         </div>
@@ -2096,7 +2184,7 @@
   </div>
 
   <script>
-    // KARTU STOCK build: 2026-11-15-advanced-photo-gallery-controls-v1 (safe primary, reorder, preview and replace controls)
+    // KARTU STOCK build: 2026-11-15-advanced-photo-gallery-controls-v1 + approval watermark print option C
     const ADMIN_PIN_SECRET = "bnbzipper";
 
     const firebaseConfig = {
@@ -5404,6 +5492,34 @@
       setElementText('doc-req-qty', `${reqData.qty} Pcs`);
       setElementText('doc-req-note', reqData.note);
       setElementText('doc-sign-pemohon', `( ${reqData.requester} )`);
+
+      // Status comes from the existing request record; no Firestore schema change.
+      const statusOverride = approvalStatusOverrides.get(String(reqData.id || ''));
+      const requestStatus = String(statusOverride || reqData.status || '').trim().toLowerCase();
+      const statusMeta = {
+        approved: { label: 'APPROVED', className: 'request-status-approved', watermark: 'APPROVED' },
+        rejected: { label: 'REJECTED', className: 'request-status-rejected', watermark: 'REJECTED' },
+        pending: { label: 'PENDING', className: 'request-status-pending', watermark: '' }
+      };
+      const printStatus = statusMeta[requestStatus] || {
+        label: 'STATUS UNKNOWN',
+        className: 'request-status-unknown',
+        watermark: ''
+      };
+
+      const printPaper = document.getElementById('print-request-paper');
+      if (printPaper) {
+        printPaper.classList.remove(
+          'request-status-approved',
+          'request-status-rejected',
+          'request-status-pending',
+          'request-status-unknown'
+        );
+        printPaper.classList.add(printStatus.className);
+      }
+
+      setElementText('doc-req-status', printStatus.label);
+      setElementText('doc-req-watermark', printStatus.watermark);
 
       openModal('modal-print-request');
     }
