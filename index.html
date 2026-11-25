@@ -6881,13 +6881,26 @@
 
     // =====================================================================
     // MONTHLY ASSET VALUATION — immutable month-end inventory snapshots
-    // Isolated feature: reads products, writes only monthlyAssetSnapshots.
+    // Isolated feature: server API reads products and writes only monthlyAssetSnapshots.
     // It never changes product stock, mutation history, or product prices.
     // =====================================================================
 
-    function getMonthlyAssetPeriodKey(dateValue = new Date()) {
+    function getMonthlyAssetJakartaDateParts(dateValue = new Date()) {
       const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
-      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(date);
+      const result = {};
+      for (const part of parts) if (part.type !== 'literal') result[part.type] = part.value;
+      return result;
+    }
+
+    function getMonthlyAssetPeriodKey(dateValue = new Date()) {
+      const parts = getMonthlyAssetJakartaDateParts(dateValue);
+      return `${parts.year}-${parts.month}`;
     }
 
     function getMonthlyAssetPeriodLabel(periodKey) {
@@ -6912,10 +6925,12 @@
     function initializeMonthlyAssetPeriodOptions() {
       const select = document.getElementById('monthly-asset-period');
       if (!select || select.options.length) return;
-      const now = new Date();
-      const current = getMonthlyAssetPeriodKey(now);
+      const jakartaNow = getMonthlyAssetJakartaDateParts(new Date());
+      const currentYear = Number(jakartaNow.year);
+      const currentMonth = Number(jakartaNow.month);
+      const current = getMonthlyAssetPeriodKey(new Date(Date.UTC(currentYear, currentMonth - 1, 1)));
       for (let offset = 0; offset < 36; offset++) {
-        const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+        const date = new Date(Date.UTC(currentYear, currentMonth - 1 - offset, 1));
         const key = getMonthlyAssetPeriodKey(date);
         const option = document.createElement('option');
         option.value = key;
@@ -6940,9 +6955,9 @@
       const period = select ? select.value : getMonthlyAssetPeriodKey();
       const currentPeriod = getMonthlyAssetPeriodKey(new Date());
       const lastDay = getMonthlyAssetLastDay(period);
-      const today = new Date();
+      const jakartaToday = getMonthlyAssetJakartaDateParts(new Date());
       const isCurrentPeriod = period === currentPeriod;
-      const isLastDay = isCurrentPeriod && today.getDate() === lastDay;
+      const isLastDay = isCurrentPeriod && Number(jakartaToday.day) === lastDay;
       const isFuture = period > currentPeriod;
       const title = document.getElementById('monthly-asset-empty-title');
       const message = document.getElementById('monthly-asset-empty-message');
@@ -6962,7 +6977,7 @@
         }
       }
       if (button) {
-        button.disabled = !(isLastDay && currentRole === 'admin' && isCloudConnected && !monthlyAssetLoading);
+        button.disabled = !(isLastDay && currentRole === 'admin' && isAdminAuthenticated && !monthlyAssetLoading);
       }
       if (hint) {
         hint.textContent = isLastDay
@@ -6979,7 +6994,7 @@
       if (refreshButton) refreshButton.disabled = monthlyAssetLoading;
 
       if (monthlyAssetLoading) {
-        if (status) status.textContent = `Memuat snapshot ${title} dari Firestore...`;
+        if (status) status.textContent = `Memuat snapshot ${title} melalui Vercel API...`;
         setMonthlyAssetVisibility('monthly-asset-no-snapshot', false);
         setMonthlyAssetVisibility('monthly-asset-snapshot-content', false);
         return;
@@ -6991,10 +7006,10 @@
         const button = document.getElementById('monthly-asset-close-button');
         if (button) button.disabled = true;
         const message = document.getElementById('monthly-asset-empty-message');
-        if (message) message.textContent = 'Gagal membaca data snapshot. Periksa koneksi dan Firestore Rules, lalu tekan Muat Ulang.';
+        if (message) message.textContent = monthlyAssetLoadError || 'Gagal membaca snapshot melalui Vercel API. Periksa sesi Admin, Service Account, dan koneksi.';
         return;
       }
-      if (status) status.textContent = `Periode dipilih: ${title} · Sumber data: Firestore`;
+      if (status) status.textContent = `Periode dipilih: ${title} · Sumber data: Firestore melalui server`;
 
       if (!monthlyAssetSnapshot) {
         setMonthlyAssetVisibility('monthly-asset-no-snapshot', true);
@@ -7031,6 +7046,50 @@
       renderMonthlyAssetTable();
     }
 
+    async function requestMonthlyAssetApi(method, period) {
+      const options = {
+        method,
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' }
+      };
+      if (method === 'POST') {
+        options.headers['Content-Type'] = 'application/json';
+        options.body = JSON.stringify({ period });
+      }
+
+      let response;
+      try {
+        const url = method === 'GET'
+          ? `/api/monthly-asset-snapshots?period=${encodeURIComponent(period)}`
+          : '/api/monthly-asset-snapshots';
+        response = await fetch(url, options);
+      } catch (_) {
+        throw new Error('Tidak dapat menghubungi Vercel API. Periksa koneksi internet lalu coba kembali.');
+      }
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const messages = {
+          ADMIN_SESSION_REQUIRED: 'Sesi Admin server tidak aktif. Klik Admin dan login ulang.',
+          ADMIN_ONLY: 'Akses Monthly Asset Valuation hanya tersedia untuk Admin.',
+          FIREBASE_SERVICE_ACCOUNT_NOT_CONFIGURED: 'Service Account Firestore belum dikonfigurasi pada Vercel. Periksa FIREBASE_SERVICE_ACCOUNT_JSON.',
+          FIREBASE_SERVICE_ACCOUNT_INVALID: 'FIREBASE_SERVICE_ACCOUNT_JSON pada Vercel tidak valid.',
+          FIREBASE_PROJECT_MISMATCH: 'Service Account berasal dari project Firebase yang berbeda.',
+          FIREBASE_PRIVATE_KEY_INVALID: 'Private key Service Account tidak valid. Periksa Environment Variables Vercel.',
+          FIREBASE_TOKEN_EXCHANGE_FAILED: 'Vercel gagal memperoleh token Firestore. Periksa Service Account.',
+          FIRESTORE_IAM_PERMISSION_DENIED: 'Service Account belum memiliki izin IAM untuk membaca dan membuat dokumen Firestore.',
+          SNAPSHOT_ALREADY_EXISTS: 'Snapshot periode ini sudah dibuat. Data tidak ditimpa.',
+          MONTH_END_ONLY: result.message || 'Tutup buku hanya dapat dilakukan pada hari terakhir bulan berjalan di zona waktu Jakarta.'
+        };
+        const error = new Error(messages[result.error] || result.message || `Permintaan gagal (HTTP ${response.status}).`);
+        error.code = result.error || 'MONTHLY_ASSET_API_ERROR';
+        error.status = response.status;
+        throw error;
+      }
+      return result;
+    }
+
     async function loadMonthlyAssetSnapshot() {
       if (currentRole !== 'admin') {
         showToast('Monthly Asset Valuation hanya dapat diakses Admin.', 'error');
@@ -7041,71 +7100,34 @@
       const select = document.getElementById('monthly-asset-period');
       const period = select ? select.value : getMonthlyAssetPeriodKey();
       if (!/^\d{4}-\d{2}$/.test(period)) return;
-      if (!db || !isCloudConnected) {
-        monthlyAssetLoadError = 'Firestore tidak terhubung. Snapshot bulanan memerlukan koneksi Cloud.';
-        monthlyAssetSnapshot = null;
-        monthlyAssetPreviousSnapshot = null;
-        renderMonthlyAssetView();
-        return;
-      }
 
       monthlyAssetLoading = true;
       monthlyAssetLoadError = '';
       renderMonthlyAssetView();
       try {
-        const previousPeriod = getMonthlyAssetPreviousPeriod(period);
-        const [currentDoc, previousDoc] = await Promise.all([
-          db.collection('monthlyAssetSnapshots').doc(period).get({ source: 'server' }),
-          db.collection('monthlyAssetSnapshots').doc(previousPeriod).get({ source: 'server' })
-        ]);
-        monthlyAssetSnapshot = currentDoc.exists ? (currentDoc.data() || null) : null;
-        monthlyAssetPreviousSnapshot = previousDoc.exists ? (previousDoc.data() || null) : null;
+        const result = await requestMonthlyAssetApi('GET', period);
+        monthlyAssetSnapshot = result.snapshot || null;
+        monthlyAssetPreviousSnapshot = result.previousSnapshot || null;
         monthlyAssetLoading = false;
         renderMonthlyAssetView();
       } catch (error) {
-        console.error('Gagal memuat Monthly Asset Valuation:', error);
+        console.error('Gagal memuat Monthly Asset Valuation:', error?.code || error?.message || 'UNKNOWN');
         monthlyAssetLoading = false;
         monthlyAssetSnapshot = null;
         monthlyAssetPreviousSnapshot = null;
-        monthlyAssetLoadError = /permission-denied|insufficient permissions/i.test(String(error?.message || error))
-          ? 'Firestore menolak akses ke monthlyAssetSnapshots. Tambahkan izin koleksi baru ke Firestore Rules sebelum menggunakan fitur ini.'
-          : `Gagal memuat snapshot: ${String(error?.message || 'Kesalahan tidak diketahui').slice(0, 180)}`;
+        monthlyAssetLoadError = String(error?.message || 'Gagal membaca snapshot dari server.');
         renderMonthlyAssetView();
       }
     }
 
     async function verifyMonthlyAssetAdminAccess() {
-      if (currentRole !== 'admin' || !isAdminAuthenticated) throw new Error('Sesi Admin tidak aktif. Login ulang sebelum tutup buku.');
-      const config = await getDrivePhotoIntegrationConfig();
-      if (config.authConfigured || config.enabled) {
-        const session = await getServerPhotoSession();
-        if (!session.authenticated || session.role !== 'admin') {
-          throw new Error('Sesi Admin server tidak aktif. Silakan login Admin kembali.');
-        }
+      if (currentRole !== 'admin' || !isAdminAuthenticated) {
+        throw new Error('Sesi Admin aplikasi tidak aktif. Login ulang sebelum tutup buku.');
       }
-    }
-
-    function buildMonthlyAssetSnapshotItems(sourceProducts) {
-      return (Array.isArray(sourceProducts) ? sourceProducts : []).map(product => {
-        const stock = Number(product.stock ?? 0);
-        const unitPrice = Number(product.price ?? 0);
-        if (!Number.isFinite(stock) || stock < 0) throw new Error(`Stok tidak valid pada SKU ${product.sku || '(tanpa SKU)'}. Snapshot dibatalkan.`);
-        if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new Error(`Harga satuan tidak valid pada SKU ${product.sku || '(tanpa SKU)'}. Snapshot dibatalkan.`);
-        const assetValue = stock * unitPrice;
-        if (!Number.isFinite(assetValue)) throw new Error(`Nilai aset melebihi batas hitung pada SKU ${product.sku || '(tanpa SKU)'}.`);
-        return {
-          product_id: String(product.id || ''),
-          sku: String(product.sku || '').trim().toUpperCase(),
-          name: String(product.name || '').trim(),
-          origin: String(product.origin || 'lokal').toLowerCase(),
-          category: String(product.category || 'General'),
-          warehouse: String(product.warehouse || 'Gudang Utama A'),
-          shelf: String(product.shelf || 'A-01'),
-          stock,
-          unit_price: unitPrice,
-          asset_value: assetValue
-        };
-      }).sort((a, b) => String(a.sku).localeCompare(String(b.sku), undefined, { numeric: true, sensitivity: 'base' }));
+      const session = await getServerPhotoSession();
+      if (!session.authenticated || session.role !== 'admin') {
+        throw new Error('Sesi Admin server tidak aktif. Silakan login Admin kembali.');
+      }
     }
 
     async function createMonthlyAssetSnapshot() {
@@ -7114,21 +7136,18 @@
       const period = select ? select.value : '';
       const currentPeriod = getMonthlyAssetPeriodKey(new Date());
       const button = document.getElementById('monthly-asset-close-button');
+
       if (currentRole !== 'admin' || !isAdminAuthenticated) {
         showToast('Tutup buku hanya dapat dilakukan Admin.', 'error');
-        return;
-      }
-      if (!db || !isCloudConnected) {
-        showToast('Firestore tidak terhubung. Snapshot resmi tidak dapat disimpan offline.', 'error');
         return;
       }
       if (period !== currentPeriod) {
         showToast('Snapshot resmi hanya dapat dibuat untuk bulan berjalan pada hari terakhir bulan tersebut.', 'error');
         return;
       }
-      const now = new Date();
+      const jakartaToday = getMonthlyAssetJakartaDateParts(new Date());
       const lastDay = getMonthlyAssetLastDay(period);
-      if (now.getDate() !== lastDay) {
+      if (Number(jakartaToday.day) !== lastDay) {
         showToast(`Tutup buku ${getMonthlyAssetPeriodLabel(period)} hanya dapat dilakukan pada tanggal ${lastDay}.`, 'error');
         renderMonthlyAssetView();
         return;
@@ -7138,74 +7157,31 @@
         return;
       }
 
-      const confirmed = window.confirm(`Tutup buku ${getMonthlyAssetPeriodLabel(period)} sekarang?\n\nAplikasi akan membaca stok dan harga satuan terbaru dari Firestore lalu menyimpan snapshot permanen. Pastikan seluruh barang masuk, keluar, dan adjustment bulan ini sudah selesai. Snapshot tidak dapat ditimpa melalui aplikasi.`);
+      const confirmed = window.confirm(`Tutup buku ${getMonthlyAssetPeriodLabel(period)} sekarang?\n\nVercel akan membaca stok dan harga satuan langsung dari Firestore menggunakan Service Account, lalu membuat satu snapshot permanen. Pastikan seluruh barang masuk, keluar, dan adjustment bulan ini sudah selesai. Snapshot tidak dapat ditimpa melalui aplikasi.`);
       if (!confirmed) return;
 
       monthlyAssetLoading = true;
-      if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Membaca data...'; }
+      if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Membaca data...';
+      }
       renderMonthlyAssetView();
       try {
         await verifyMonthlyAssetAdminAccess();
-        // Read from the server, never from cache, to avoid taking a stale local snapshot.
-        const productSnapshot = await db.collection('products').get({ source: 'server' });
-        const sourceProducts = productSnapshot.docs.map(doc => normalizeProductData({ ...(doc.data() || {}), id: (doc.data() || {}).id || doc.id }));
-        if (!sourceProducts.length) throw new Error('Tidak ada master barang di Firestore. Snapshot kosong tidak dibuat.');
+        const result = await requestMonthlyAssetApi('POST', period);
+        if (!result.snapshot) throw new Error('Server tidak mengembalikan data snapshot yang tersimpan.');
 
-        const items = buildMonthlyAssetSnapshotItems(sourceProducts);
-        const totalAsset = items.reduce((sum, item) => sum + item.asset_value, 0);
-        const totalStock = items.reduce((sum, item) => sum + item.stock, 0);
-        const localValue = items.filter(item => item.origin === 'lokal').reduce((sum, item) => sum + item.asset_value, 0);
-        const importValue = items.filter(item => item.origin === 'import').reduce((sum, item) => sum + item.asset_value, 0);
-        const otherValue = totalAsset - localValue - importValue;
-        const capturedAt = new Date().toISOString();
-        const payload = {
-          schema_version: 1,
-          period,
-          period_label: getMonthlyAssetPeriodLabel(period),
-          snapshot_status: 'closed',
-          snapshot_method: 'manual_month_end_closing',
-          captured_at: capturedAt,
-          captured_by: 'Admin',
-          source: 'Firestore products collection (server read)',
-          item_count: items.length,
-          total_stock_quantity: totalStock,
-          total_asset_value: totalAsset,
-          total_asset_local: localValue,
-          total_asset_import: importValue,
-          total_asset_other: otherValue,
-          items
-        };
-        const serialized = JSON.stringify(payload);
-        const estimatedBytes = typeof TextEncoder !== 'undefined'
-          ? new TextEncoder().encode(serialized).length
-          : serialized.length * 2;
-        if (estimatedBytes > 800000) {
-          throw new Error(`Data snapshot sekitar ${(estimatedBytes / 1024).toFixed(0)} KB. Batas aman dokumen tunggal terlampaui; snapshot dibatalkan agar tidak gagal di Firestore.`);
-        }
-
-        const snapshotRef = db.collection('monthlyAssetSnapshots').doc(period);
-        await db.runTransaction(async transaction => {
-          const existing = await transaction.get(snapshotRef);
-          if (existing.exists) throw new Error('SNAPSHOT_ALREADY_EXISTS');
-          transaction.set(snapshotRef, payload);
-        });
-
-        monthlyAssetSnapshot = payload;
-        showToast(`Snapshot nilai aset ${payload.period_label} berhasil disimpan dan dikunci.`);
+        monthlyAssetSnapshot = result.snapshot;
+        showToast(`Snapshot nilai aset ${result.snapshot.period_label} berhasil disimpan dan dikunci.`);
         monthlyAssetLoading = false;
         if (button) button.innerHTML = '<i class="fa-solid fa-lock mr-1"></i> Snapshot Tersimpan';
         renderMonthlyAssetView();
       } catch (error) {
-        console.error('Gagal membuat snapshot aset bulanan:', error);
+        console.error('Gagal membuat snapshot aset bulanan:', error?.code || error?.message || 'UNKNOWN');
         monthlyAssetLoading = false;
         if (button) button.innerHTML = '<i class="fa-solid fa-lock mr-1"></i> Tutup Bulan & Simpan Snapshot';
         renderMonthlyAssetView();
-        const message = error?.message === 'SNAPSHOT_ALREADY_EXISTS'
-          ? 'Snapshot periode ini sudah dibuat. Data tidak ditimpa.'
-          : /permission-denied|insufficient permissions/i.test(String(error?.message || error))
-            ? 'Firestore menolak penulisan monthlyAssetSnapshots. Firestore Rules perlu mengizinkan create untuk koleksi baru sebelum tutup buku.'
-            : String(error?.message || 'Gagal menyimpan snapshot.');
-        showToast(message, 'error');
+        showToast(String(error?.message || 'Gagal menyimpan snapshot.'), 'error');
       }
     }
 
